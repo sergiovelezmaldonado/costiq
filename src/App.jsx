@@ -49,6 +49,8 @@ const SAMPLE_ACTIVITIES = [
   { id:'s6', name:'Revisiones y aprobaciones lentas', category:'Revisiones y aprobaciones',      minutesPerDay:20, affectedEmployees:10, automationPotential:'Medio', aiTimeReduction:50, minutesWithAI:null },
 ];
 
+const SAMPLE_IDS = new Set(SAMPLE_ACTIVITIES.map(s => s.id));
+
 const ACTIVITY_LIBRARY = [
   { area:'Operaciones', color:'#2A5B8C', bg:'#dbeafe', activities:[
     { name:'Reuniones de seguimiento sin agenda clara',              category:'Reuniones innecesarias',         minutesPerDay:45, affectedEmployees:8, automationPotential:'Medio', aiTimeReduction:40 },
@@ -132,6 +134,11 @@ const ACTIVITY_LIBRARY = [
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).substr(2, 9);
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const slugify = (s) =>
+  String(s || 'empresa').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'empresa';
 
 const fmt = (n, currency = 'USD', dec = 0) => {
   const s = CURRENCIES.find(c => c.code === currency)?.symbol ?? '$';
@@ -310,6 +317,9 @@ export default function App() {
 
   const curr = CURRENCIES.find(c => c.code === cfg.currency) || CURRENCIES[0];
 
+  // True while the loaded activities are the built-in sample set (used for the banner + confirm guard)
+  const isSampleData = acts.length > 0 && acts.every(a => SAMPLE_IDS.has(a.id));
+
   // ── Calculations ──────────────────────────────────────────────────────────
   const metrics = useMemo(() => acts.map(a => {
     const hDay  = a.minutesPerDay / 60;
@@ -395,9 +405,17 @@ export default function App() {
   const updAct = (id, field, val) =>
     setActs(p => p.map(a => a.id === id ? { ...a, [field]: val } : a));
 
-  const delAct = id => setActs(p => p.filter(a => a.id !== id));
+  const delAct = id => {
+    const act = acts.find(a => a.id === id);
+    if (!window.confirm(`¿Eliminar la actividad "${act?.name || ''}"? Esta acción no se puede deshacer.`)) return;
+    setActs(p => p.filter(a => a.id !== id));
+  };
 
-  const loadSample = () => { setActs(SAMPLE_ACTIVITIES); };
+  const loadSample = () => {
+    if (acts.length > 0 && !isSampleData &&
+        !window.confirm('Esto reemplazará las actividades actuales con los datos de ejemplo. ¿Continuar?')) return;
+    setActs(SAMPLE_ACTIVITIES);
+  };
 
   const clearAll = () => {
     if (!window.confirm('¿Limpiar todos los datos?')) return;
@@ -421,21 +439,154 @@ export default function App() {
     const csv = [hdr, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'costiq-reporte.csv'; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `costiq-reporte-${slugify(cfg.companyName)}-${todayISO()}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
 
   const exportJSON = () => {
     const data = {
+      app: 'CostIQ', version: 2,
       empresa: cfg.companyName, departamento: cfg.department,
       fecha: new Date().toLocaleDateString('es-MX'),
-      config: cfg, actividades: metrics,
-      totales: { costoMensual: tot.totalCostMon, costoAnual: tot.totalCostYr, ahorroMensual: tot.totalSavMon, ahorroAnual: tot.totalSavYr },
-      roi: { breakEven: roiCalc.breakEven, roi12: roiCalc.roi12, roi24: roiCalc.roi24, roi36: roiCalc.roi36 },
+      // Bloque restaurable — lo lee "Cargar análisis"
+      estado: { cfg, acts, roi },
+      // Resumen legible (no se usa al reimportar)
+      resumen: {
+        actividades: metrics,
+        totales: { costoMensual: tot.totalCostMon, costoAnual: tot.totalCostYr, ahorroMensual: tot.totalSavMon, ahorroAnual: tot.totalSavYr },
+        roi: { breakEven: roiCalc.breakEven, roi12: roiCalc.roi12, roi24: roiCalc.roi24, roi36: roiCalc.roi36 },
+      },
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'costiq-datos.json'; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `costiq-${slugify(cfg.companyName)}-${todayISO()}.json`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Restaura un análisis completo desde un .json exportado por CostIQ
+  const importJSON = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      let data;
+      try { data = JSON.parse(ev.target.result); }
+      catch { alert('No se pudo leer el archivo. Asegúrate de que sea un JSON exportado por CostIQ.'); return; }
+      // Acepta el formato v2 (estado) y, por compatibilidad, el antiguo (config/actividades)
+      const st = data?.estado || (data?.config ? { cfg: data.config, acts: data.actividades, roi: null } : null);
+      if (!st || !st.cfg || !Array.isArray(st.acts)) {
+        alert('Este archivo no es un análisis de CostIQ válido. Usa un archivo exportado con "Exportar JSON".');
+        return;
+      }
+      if (acts.length > 0 && !isSampleData &&
+          !window.confirm('Esto reemplazará el análisis actual con el del archivo. ¿Continuar?')) return;
+      const clean = st.acts.filter(a => a && a.name).map(a => ({
+        id: a.id || uid(),
+        name: String(a.name),
+        category: CATEGORIES.includes(a.category) ? a.category : CATEGORIES[0],
+        minutesPerDay: Math.max(1, parseInt(a.minutesPerDay) || 30),
+        affectedEmployees: Math.max(1, parseInt(a.affectedEmployees) || 1),
+        automationPotential: ['Alto','Medio','Bajo'].includes(a.automationPotential) ? a.automationPotential : 'Medio',
+        aiTimeReduction: Math.min(100, Math.max(0, parseInt(a.aiTimeReduction) || 50)),
+        minutesWithAI: (a.minutesWithAI != null && a.minutesWithAI !== '' && !isNaN(+a.minutesWithAI)) ? +a.minutesWithAI : null,
+      }));
+      setCfg(c => ({ ...c, ...st.cfg }));
+      setActs(clean);
+      if (st.roi) setRoi(r => ({ ...r, ...st.roi }));
+      setTab('dashboard');
+    };
+    reader.readAsText(file, 'UTF-8');
+    e.target.value = '';
+  };
+
+  // ── Word export (HTML → .doc, sin librerías) ───────────────────────────────
+  const exportWord = () => {
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const dateStr = new Date().toLocaleDateString('es-MX', { day:'numeric', month:'long', year:'numeric' });
+    const sorted = [...metrics].sort((a,b) => b.costMon - a.costMon);
+
+    const kpiCard = (label, value, color) =>
+      `<td style="border:1px solid #e5e5e5;padding:10px 12px;text-align:center;">
+         <div style="font-size:9pt;color:#757575;margin-bottom:4px;">${esc(label)}</div>
+         <div style="font-size:15pt;font-weight:bold;color:${color};">${esc(value)}</div>
+       </td>`;
+
+    const actRows = sorted.map(m => `
+      <tr>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;">${esc(m.name)}<div style="font-size:8pt;color:#757575;">${esc(m.category)}</div></td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;">${m.affectedEmployees}</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#b00020;font-weight:bold;">${esc(fmt(m.costMon, cfg.currency))}</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#2A5B8C;">${esc(fmt(m.aiCostMon, cfg.currency))}</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#16a34a;font-weight:bold;">${esc(fmt(m.savMon, cfg.currency))}</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;color:#16a34a;">-${m.effectiveReduction}%${m.isMeasured ? ' ✓' : ''}</td>
+      </tr>`).join('');
+
+    const conclusion = roiCalc.breakEven
+      ? `La inversión en IA estimada se recuperaría en aproximadamente <b>${roiCalc.breakEven} meses</b>, generando un ROI del <b>${fmtN(roiCalc.roi12, 0)}%</b> a los 12 meses.`
+      : `Ajusta los parámetros de inversión en la pestaña ROI para calcular el período de retorno.`;
+
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>Reporte CostIQ</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->
+</head>
+<body style="font-family:Calibri,Arial,sans-serif;color:#222222;font-size:11pt;">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:18px;"><tr>
+    <td style="width:42px;vertical-align:middle;">
+      <table style="border-collapse:collapse;"><tr><td bgcolor="#b00020" style="width:36px;height:36px;text-align:center;color:#ffffff;font-weight:bold;font-size:16pt;border-radius:8px;">F</td></tr></table>
+    </td>
+    <td style="vertical-align:middle;padding-left:10px;">
+      <div style="font-size:16pt;font-weight:bold;color:#222222;">${esc(cfg.companyName)}${cfg.department ? ' · ' + esc(cfg.department) : ''}</div>
+      <div style="font-size:10pt;color:#757575;">Análisis de costos ocultos por ineficiencia operativa</div>
+    </td>
+    <td style="vertical-align:middle;text-align:right;color:#757575;font-size:9pt;">
+      CostIQ · <b style="color:#b00020;">FuturIA</b><br>${esc(dateStr)}
+    </td>
+  </tr></table>
+
+  <h3 style="color:#b00020;border-bottom:2px solid #b00020;padding-bottom:4px;">Resumen ejecutivo</h3>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:16px;"><tr>
+    ${kpiCard('Costo mensual actual', fmt(tot.totalCostMon, cfg.currency), '#b00020')}
+    ${kpiCard('Costo anual actual', fmt(tot.totalCostYr, cfg.currency), '#b00020')}
+    ${kpiCard('Ahorro mensual c/IA', fmt(tot.totalSavMon, cfg.currency), '#16a34a')}
+    ${kpiCard('Ahorro anual c/IA', fmt(tot.totalSavYr, cfg.currency), '#16a34a')}
+  </tr></table>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:20px;"><tr>
+    ${kpiCard('Break-even estimado', roiCalc.breakEven ? 'Mes ' + roiCalc.breakEven : '> 36 meses', '#2A5B8C')}
+    ${kpiCard('ROI a 12 meses', fmtN(roiCalc.roi12, 0) + '%', roiCalc.roi12 > 0 ? '#16a34a' : '#b00020')}
+    ${kpiCard('Reducción promedio con IA', fmtN(tot.avgRed, 0) + '%', '#16a34a')}
+  </tr></table>
+
+  <h3 style="color:#b00020;border-bottom:2px solid #b00020;padding-bottom:4px;">Actividades analizadas (${acts.length})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:10pt;margin-bottom:20px;">
+    <thead><tr style="background:#fff5f6;">
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:left;">Actividad</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;">Pers.</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">Sin IA/mes</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">Con IA/mes</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">Ahorro/mes</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;">Reducción</th>
+    </tr></thead>
+    <tbody>${actRows}
+      <tr style="background:#fff5f6;font-weight:bold;">
+        <td colspan="2" style="border:1px solid #e5e5e5;padding:6px 8px;">TOTAL</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#b00020;">${esc(fmt(tot.totalCostMon, cfg.currency))}</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#2A5B8C;">${esc(fmt(tot.totalCostMon - tot.totalSavMon, cfg.currency))}</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#16a34a;">${esc(fmt(tot.totalSavMon, cfg.currency))}</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;color:#16a34a;">-${fmtN(tot.avgRed, 0)}%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="color:#b00020;border-bottom:2px solid #b00020;padding-bottom:4px;">Conclusión ejecutiva</h3>
+  <p style="line-height:1.5;"><b>${esc(cfg.companyName)}</b> está perdiendo <b>${esc(fmt(tot.totalCostYr, cfg.currency))} anuales</b> en ${acts.length} actividad${acts.length !== 1 ? 'es' : ''} de baja productividad identificadas. Con la adopción de herramientas de inteligencia artificial, se estima un ahorro potencial de <b>${esc(fmt(tot.totalSavYr, cfg.currency))} por año</b> (${fmtN(tot.avgRed, 0)}% de reducción promedio en tiempo). ${conclusion}</p>
+  ${tot.topCost ? `<p style="font-size:9pt;color:#757575;">La actividad de mayor costo es <b>"${esc(tot.topCost.name)}"</b> con un impacto de <b>${esc(fmt(tot.topCost.costMon, cfg.currency))}/mes</b> (${esc(fmt(tot.topCost.costYear, cfg.currency))}/año).</p>` : ''}
+  <p style="font-size:8pt;color:#b00020;margin-top:14px;">* Los cálculos son estimaciones basadas en los datos ingresados. Los resultados reales dependerán de la herramienta seleccionada, la tasa de adopción del equipo y la calidad de implementación.</p>
+  <p style="font-size:8pt;color:#757575;border-top:1px solid #e5e5e5;padding-top:8px;margin-top:18px;">Generado con CostIQ — una herramienta de FuturIA · futuria.substack.com</p>
+</body></html>`;
+
+    const blob = new Blob(['﻿' + html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `costiq-reporte-${slugify(cfg.companyName)}-${todayISO()}.doc`; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -493,7 +644,7 @@ export default function App() {
 </Workbook>`;
     const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'costiq-plantilla.xls'; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `costiq-plantilla-${todayISO()}.xls`; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -656,9 +807,9 @@ export default function App() {
                 {
                   step: '6', icon: '📄', tab: 'report', color: '#065f46', bg: '#d1fae5',
                   title: 'Genera el reporte ejecutivo',
-                  desc: 'Con un solo clic genera un resumen ejecutivo completo con todos los datos, listo para presentar. Puedes exportarlo en CSV, JSON o imprimirlo directamente como PDF.',
-                  tip: '💡 El reporte incluye conclusión ejecutiva automática con los datos clave. Personaliza primero tu nombre de empresa en Configuración.',
-                  fields: ['Resumen de KPIs', 'Lista de actividades', 'Conclusión ejecutiva', 'Exportar CSV / JSON / PDF'],
+                  desc: 'Con un solo clic genera un resumen ejecutivo completo con gráficos, listo para presentar. Descárgalo en Word, CSV o JSON, o imprímelo como PDF. Con "Guardar análisis" exportas todo tu trabajo a un archivo que puedes volver a cargar cuando quieras.',
+                  tip: '💡 Guarda un análisis por cliente o escenario y recárgalo con "Cargar análisis". El reporte incluye conclusión ejecutiva automática — personaliza primero el nombre de empresa en Configuración.',
+                  fields: ['Resumen de KPIs', 'Gráficos', 'Conclusión ejecutiva', 'Word / CSV / JSON / PDF', 'Guardar y cargar análisis'],
                 },
               ].map(s => (
                 <div key={s.step} className="bg-white border border-[#e5e5e5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -780,6 +931,15 @@ export default function App() {
                   <button onClick={loadSample} className={btnR}>Cargar datos de ejemplo</button>
                   <button onClick={() => setTab('activities')} className={btnO}>Agregar actividades</button>
                 </div>
+              </div>
+            )}
+
+            {/* Sample-data banner */}
+            {hasData && isSampleData && (
+              <div className="flex items-start gap-2 bg-[#fef9c3] border border-[#854d0e]/30 rounded-xl px-4 py-3 mb-5 text-xs text-[#854d0e]">
+                <span className="text-sm">💡</span>
+                <span className="flex-1">Estás viendo <strong>datos de ejemplo</strong>. Reemplázalos con los de tu empresa en la pestaña Actividades, o ajusta los parámetros en Configuración.</span>
+                <button onClick={clearAll} className="font-semibold underline whitespace-nowrap">Empezar de cero</button>
               </div>
             )}
 
@@ -910,6 +1070,15 @@ export default function App() {
                 <button onClick={() => { setDraft(blankAct); setAddOpen(true); }} className={btnR}>+ Nueva actividad</button>
               </div>
             </div>
+
+            {/* Sample-data banner */}
+            {hasData && isSampleData && (
+              <div className="flex items-start gap-2 bg-[#fef9c3] border border-[#854d0e]/30 rounded-xl px-4 py-3 mb-5 text-xs text-[#854d0e]">
+                <span className="text-sm">💡</span>
+                <span className="flex-1">Estas son <strong>actividades de ejemplo</strong>. Edítalas, elimínalas o agrega las tuyas. Para partir de una hoja en blanco usa "Empezar de cero".</span>
+                <button onClick={clearAll} className="font-semibold underline whitespace-nowrap">Empezar de cero</button>
+              </div>
+            )}
 
             {/* Add form */}
             {addOpen && (
@@ -1405,12 +1574,20 @@ export default function App() {
               </Card>
             </div>
 
-            <div className="flex gap-3 mt-1 flex-wrap">
+            <div className="flex gap-3 mt-1 flex-wrap items-center">
               <button onClick={loadSample} className={btnO}>Cargar datos de ejemplo</button>
+              <button onClick={exportJSON} className={btnO}>💾 Guardar análisis (JSON)</button>
+              <label className={btnO + ' cursor-pointer'}>
+                📂 Cargar análisis
+                <input type="file" accept=".json,application/json" className="hidden" onChange={importJSON} />
+              </label>
               <button onClick={clearAll} className="border border-red-100 hover:border-[#b00020] text-[#b00020] text-sm font-medium px-4 py-2 rounded-lg transition-colors bg-white cursor-pointer">
                 Limpiar todo
               </button>
             </div>
+            <p className="text-[11px] text-[#757575] mt-2">
+              💾 <strong>Guardar análisis</strong> descarga un archivo con todo tu trabajo (empresa, actividades y ROI). Guarda uno por cliente o escenario y vuelve a cargarlo cuando quieras con <strong>Cargar análisis</strong>.
+            </p>
           </div>
         )}
 
@@ -1425,8 +1602,13 @@ export default function App() {
                 <p className="text-sm text-[#757575]">Genera y descarga el análisis para presentar a tu equipo directivo.</p>
               </div>
               <div className="flex gap-2 flex-wrap no-print">
+                <button onClick={exportWord} className={btnO}>📝 Descargar Word</button>
                 <button onClick={exportCSV} className={btnO}>📥 Exportar CSV</button>
                 <button onClick={exportJSON} className={btnO}>📦 Exportar JSON</button>
+                <label className={btnO + ' cursor-pointer'}>
+                  📂 Cargar análisis
+                  <input type="file" accept=".json,application/json" className="hidden" onChange={importJSON} />
+                </label>
                 <button onClick={() => window.print()} className={btnR}>🖨️ Imprimir / PDF</button>
               </div>
             </div>
@@ -1477,6 +1659,39 @@ export default function App() {
                   <p className="text-lg font-black text-[#16a34a]">{fmtN(tot.avgRed, 0)}%</p>
                 </div>
               </div>
+
+              {/* Charts — visual summary for the printed report */}
+              {hasData && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                  <div className="bg-white border border-[#e5e5e5] rounded-xl p-4">
+                    <p className="text-xs font-semibold text-[#222] mb-2">Costo mensual por actividad — Sin IA vs Con IA</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={chartActs} layout="vertical" margin={{ left:10, right:20, top:5, bottom:5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                        <XAxis type="number" tick={{ fontSize:9 }} tickFormatter={v => `${curr.symbol}${(v/1000).toFixed(1)}k`} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize:8, fill:'#333' }} width={110} />
+                        <Tooltip content={<ChartTooltip currency={cfg.currency} />} />
+                        <Legend iconSize={9} wrapperStyle={{ fontSize:10 }} />
+                        <Bar dataKey="Sin IA" fill={C.red}  radius={[0,3,3,0]} />
+                        <Bar dataKey="Con IA" fill={C.blue} radius={[0,3,3,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="bg-white border border-[#e5e5e5] rounded-xl p-4">
+                    <p className="text-xs font-semibold text-[#222] mb-2">Distribución de costo por categoría</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <PieChart>
+                        <Pie data={chartCat} cx="50%" cy="50%" outerRadius={80} dataKey="value"
+                          label={({ percent }) => `${(percent*100).toFixed(0)}%`}>
+                          {chartCat.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={v => fmt(v, cfg.currency)} />
+                        <Legend formatter={v => <span style={{ fontSize:9, color:'#333' }}>{v}</span>} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
 
               {/* Activities list */}
               <Card title={`Actividades analizadas (${acts.length})`}>
@@ -1664,9 +1879,9 @@ export default function App() {
             </div>
             <div className="space-y-3 text-sm text-[#333] mb-5">
               <p>CostIQ te ayuda a <strong>cuantificar el costo real de la ineficiencia operativa</strong> en tu empresa y a proyectar el retorno de inversión al adoptar herramientas de inteligencia artificial.</p>
-              <p>Desarrollada por <a href="https://futuria.substack.com" target="_blank" rel="noopener noreferrer" className="text-[#b00020] hover:underline font-medium">FuturIA</a>, la comunidad de referencia sobre IA aplicada a negocios en LATAM.</p>
+              <p>Desarrollada por <a href="https://futuria.substack.com" target="_blank" rel="noopener noreferrer" className="text-[#b00020] hover:underline font-medium">FuturIA</a> — IA aplicada. En español. Para líderes que actúan.</p>
               <div className="grid grid-cols-3 gap-3 py-3">
-                {[['45K+','Suscriptores'],['79','Países'],['100%','Local']].map(([v, l]) => (
+                {[['+70K','Profesionales'],['+80','Países'],['100%','Local']].map(([v, l]) => (
                   <div key={l} className="text-center bg-[#fff5f6] rounded-lg p-3">
                     <div className="text-xl font-black text-[#b00020]">{v}</div>
                     <div className="text-[11px] text-[#757575]">{l}</div>

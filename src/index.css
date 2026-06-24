@@ -21,11 +21,20 @@
 }
 
 @media print {
+  @page { margin: 1.4cm; size: A4; }
   .no-print { display: none !important; }
-  header, nav.tab-nav { position: static !important; box-shadow: none !important; }
+  header, nav.tab-nav { display: none !important; }
   body { background: white !important; }
-  .shadow-sm { box-shadow: none !important; }
+  .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
   .rounded-2xl, .rounded-3xl, .rounded-xl { border-radius: 8px !important; }
-  main { padding-top: 0 !important; }
+  main { padding-top: 0 !important; max-width: none !important; }
   .sticky { position: static !important; }
+  /* Keep cards, charts and table rows from splitting across pages */
+  #report-content > div,
+  #report-content .rounded-xl,
+  .recharts-wrapper,
+  .recharts-responsive-container,
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  /* Force accent colors to print (Chrome/Edge) */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
