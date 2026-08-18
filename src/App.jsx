@@ -314,6 +314,8 @@ export default function App() {
 
   const blankAct = { name:'', category:CATEGORIES[0], minutesPerDay:30, affectedEmployees:cfg.globalEmployees, automationPotential:'Medio', aiTimeReduction:50, minutesWithAI:null };
   const [draft, setDraft] = useState(blankAct);
+  // Frecuencia de entrada del formulario "Nueva actividad" — solo UI, siempre se guarda como minutesPerDay
+  const [freq, setFreq] = useState('daily');
 
   const curr = CURRENCIES.find(c => c.code === cfg.currency) || CURRENCIES[0];
 
@@ -323,6 +325,7 @@ export default function App() {
   // ── Calculations ──────────────────────────────────────────────────────────
   const metrics = useMemo(() => acts.map(a => {
     const hDay  = a.minutesPerDay / 60;
+    const hWeek = hDay * cfg.workDaysWeek;
     const hMon  = hDay * cfg.workDaysMonth;
     const hYear = hMon * 12;
     const costMon  = hMon  * a.affectedEmployees * cfg.hourlyCost;
@@ -335,10 +338,12 @@ export default function App() {
     const aiCostMon = aiHMon * a.affectedEmployees * cfg.hourlyCost;
     const savMon  = costMon - aiCostMon;
     const savYear = savMon * 12;
-    return { ...a, hDay, hMon, hYear, costMon, costYear, aiHMon, aiCostMon, savMon, savYear, isMeasured, effectiveReduction };
+    return { ...a, hDay, hWeek, hMon, hYear, costMon, costYear, aiHMon, aiCostMon, savMon, savYear, isMeasured, effectiveReduction };
   }), [acts, cfg]);
 
   const tot = useMemo(() => {
+    const totalHDay    = metrics.reduce((s, m) => s + m.hDay * m.affectedEmployees, 0);
+    const totalHWeek   = metrics.reduce((s, m) => s + m.hWeek * m.affectedEmployees, 0);
     const totalHMon    = metrics.reduce((s, m) => s + m.hMon * m.affectedEmployees, 0);
     const totalCostMon = metrics.reduce((s, m) => s + m.costMon, 0);
     const totalCostYr  = totalCostMon * 12;
@@ -347,7 +352,7 @@ export default function App() {
     const avgRed       = metrics.length ? metrics.reduce((s, m) => s + m.aiTimeReduction, 0) / metrics.length : 0;
     const topCost      = metrics.length ? [...metrics].sort((a,b) => b.costMon - a.costMon)[0] : null;
     const topSav       = metrics.length ? [...metrics].sort((a,b) => b.savMon  - a.savMon)[0]  : null;
-    return { totalHMon, totalCostMon, totalCostYr, totalSavMon, totalSavYr, avgRed, topCost, topSav };
+    return { totalHDay, totalHWeek, totalHMon, totalCostMon, totalCostYr, totalSavMon, totalSavYr, avgRed, topCost, topSav };
   }, [metrics]);
 
   const roiCalc = useMemo(() => {
@@ -399,6 +404,7 @@ export default function App() {
     if (!draft.name.trim()) return;
     setActs(p => [...p, { ...draft, id: uid() }]);
     setDraft(blankAct);
+    setFreq('daily');
     setAddOpen(false);
   };
 
@@ -781,14 +787,14 @@ export default function App() {
                   title: 'Registra las actividades ineficientes',
                   desc: 'Agrega cada tarea que consume tiempo sin generar valor. Puedes hacerlo una a una, usando la 📚 Biblioteca con 60 actividades de referencia por área, o importando directamente el archivo Excel de plantilla.',
                   tip: '💡 Descarga la Plantilla Excel (2 pestañas: formulario + 60 actividades de referencia), complétala y luego usa "Importar archivo" para cargarla.',
-                  fields: ['Nueva actividad', '📚 Biblioteca (60+)', '📥 Plantilla Excel', '📤 Importar .xls/.csv', 'Min. con IA (medido)'],
+                  fields: ['Nueva actividad', 'Frecuencia diaria/semanal', '📚 Biblioteca (60+)', '📥 Plantilla Excel', '📤 Importar .xls/.csv', 'Min. con IA (medido)'],
                 },
                 {
                   step: '3', icon: '📊', tab: 'dashboard', color: '#d97706', bg: '#fef9c3',
                   title: 'Revisa el Dashboard',
                   desc: 'Aquí verás el costo total mensual y anual de las ineficiencias registradas, junto con la proyección de ahorro usando IA. Los gráficos muestran qué actividades generan más pérdidas.',
                   tip: '💡 El "costo mensual total" es el dinero que estás perdiendo HOY. El "ahorro estimado" es lo que podrías recuperar.',
-                  fields: ['KPIs actuales', 'KPIs con IA', 'Gráfico por actividad', 'Distribución por categoría'],
+                  fields: ['Escala diaria/semanal/mensual', 'KPIs actuales', 'KPIs con IA', 'Gráfico por actividad', 'Distribución por categoría'],
                 },
                 {
                   step: '4', icon: '⚡', tab: 'comparison', color: '#16a34a', bg: '#dcfce7',
@@ -886,6 +892,7 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
                 {[
                   { term: 'Costo mensual (Sin IA)', def: 'El dinero que pierde tu empresa cada mes en tiempo improductivo. Se calcula: minutos/día × días/mes × empleados afectados × costo/hora.' },
+                  { term: 'Frecuencia (diario/semanal)', def: 'Al crear una actividad, indica si el tiempo perdido se mide por día o por semana (ej. una reunión semanal). Si eliges "Por semana", CostIQ divide el dato entre los días laborales/semana configurados para obtener el promedio diario que usa el cálculo — ya no hace falta dividir a mano.' },
                   { term: 'Reducción con IA (%)', def: 'Porcentaje del tiempo que se estima reducir aplicando herramientas de IA a esa actividad. Alto potencial = 60-85%, Medio = 30-60%, Bajo = 10-30%.' },
                   { term: 'Potencial de automatización', def: 'Clasificación del nivel de facilidad para automatizar la actividad: Alto (se puede automatizar con herramientas disponibles hoy), Medio (requiere configuración), Bajo (automatización parcial).' },
                   { term: 'Ahorro mensual con IA', def: 'Diferencia entre el costo actual y el costo proyectado después de implementar IA. Es el dinero que dejarías de perder cada mes.' },
@@ -942,6 +949,35 @@ export default function App() {
                 <button onClick={clearAll} className="font-semibold underline whitespace-nowrap">Empezar de cero</button>
               </div>
             )}
+
+            {/* Escala del tiempo perdido — mismo dato, tres horizontes */}
+            <div className="mb-5">
+              <p className="text-[10px] font-bold text-[#757575] uppercase tracking-widest mb-2">
+                Escala del tiempo perdido
+                <HelpTip text="El mismo tiempo improductivo diario, proyectado a distintos horizontes. Suma las horas de todas las actividades y todas las personas afectadas. Semanal usa los 'días laborales/semana' de Configuración; mensual usa los 'días laborales/mes'." />
+              </p>
+              <div className="bg-[#fff5f6] border border-[#e5e5e5] rounded-2xl p-4 flex flex-wrap items-center justify-around gap-2 text-center">
+                <div className="px-3">
+                  <div className="text-[10px] font-bold text-[#757575] uppercase tracking-wide">Diario</div>
+                  <div className="text-xl font-black text-[#b00020]">{fmtN(tot.totalHDay)}h</div>
+                </div>
+                <div className="text-[#e8b7bc] text-lg">→</div>
+                <div className="px-3">
+                  <div className="text-[10px] font-bold text-[#757575] uppercase tracking-wide">Semanal</div>
+                  <div className="text-xl font-black text-[#b00020]">{fmtN(tot.totalHWeek)}h</div>
+                </div>
+                <div className="text-[#e8b7bc] text-lg">→</div>
+                <div className="px-3">
+                  <div className="text-[10px] font-bold text-[#757575] uppercase tracking-wide">Mensual</div>
+                  <div className="text-xl font-black text-[#b00020]">{fmtN(tot.totalHMon)}h</div>
+                </div>
+                <div className="text-[#e8b7bc] text-lg">→</div>
+                <div className="px-3">
+                  <div className="text-[10px] font-bold text-[#757575] uppercase tracking-wide">Anual</div>
+                  <div className="text-xl font-black text-[#b00020]">{fmtN(tot.totalHMon * 12, 0)}h</div>
+                </div>
+              </div>
+            </div>
 
             {/* KPI grid — current state */}
             <div className="mb-1">
@@ -1095,8 +1131,26 @@ export default function App() {
                       {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </Fld>
-                  <Fld label="Minutos perdidos por día" help="Tiempo promedio que cada empleado afectado pierde en esta actividad. Si es semanal, divide entre 5.">
-                    <input type="number" min="1" max="480" className={inp} value={draft.minutesPerDay} onChange={e => setDraft(p => ({ ...p, minutesPerDay: +e.target.value }))} />
+                  <Fld label="Frecuencia" help="¿La actividad ocurre todos los días o una vez por semana (ej. una reunión semanal)? CostIQ convierte el dato al promedio diario que usa el cálculo — ya no hace falta dividir a mano.">
+                    <select className={inp} value={freq} onChange={e => setFreq(e.target.value)}>
+                      <option value="daily">Por día</option>
+                      <option value="weekly">Por semana</option>
+                    </select>
+                  </Fld>
+                  <Fld
+                    label={freq === 'weekly' ? 'Minutos perdidos por semana' : 'Minutos perdidos por día'}
+                    help={freq === 'weekly'
+                      ? `Tiempo total que cada empleado afectado pierde en esta actividad a la semana (ej. una reunión semanal de 60 min). Se divide entre los ${cfg.workDaysWeek} días laborales/semana configurados para obtener el promedio diario.`
+                      : 'Tiempo promedio que cada empleado afectado pierde en esta actividad por día laboral.'}
+                  >
+                    <input
+                      type="number" min="1" max={freq === 'weekly' ? 3000 : 480} className={inp}
+                      value={freq === 'weekly' ? Math.round(draft.minutesPerDay * cfg.workDaysWeek) : draft.minutesPerDay}
+                      onChange={e => {
+                        const v = +e.target.value;
+                        setDraft(p => ({ ...p, minutesPerDay: freq === 'weekly' ? +(v / cfg.workDaysWeek).toFixed(2) : v }));
+                      }}
+                    />
                   </Fld>
                   <Fld label="Empleados afectados" help="¿Cuántas personas en tu empresa realizan esta actividad?">
                     <input type="number" min="1" className={inp} value={draft.affectedEmployees} onChange={e => setDraft(p => ({ ...p, affectedEmployees: +e.target.value }))} />
@@ -1127,7 +1181,7 @@ export default function App() {
                 )}
                 <div className="flex gap-3">
                   <button onClick={addAct} className={btnR}>Guardar actividad</button>
-                  <button onClick={() => setAddOpen(false)} className={btnO}>Cancelar</button>
+                  <button onClick={() => { setAddOpen(false); setFreq('daily'); }} className={btnO}>Cancelar</button>
                 </div>
               </div>
             )}
@@ -1148,7 +1202,7 @@ export default function App() {
                         <th className="text-left px-3 py-3 font-semibold text-[#333] text-xs hidden md:table-cell">Categoría</th>
                         <th className="text-center px-3 py-3 font-semibold text-[#333] text-xs">
                           Min/día sin IA
-                          <HelpTip text="Minutos que cada persona afectada pierde en esta actividad por día laboral (sin usar IA). Si la actividad es semanal, divide el total entre 5." />
+                          <HelpTip text="Minutos que cada persona afectada pierde en esta actividad por día laboral (sin usar IA). Al editar aquí directamente el valor siempre es diario; para cargar un dato semanal usa el selector de Frecuencia en 'Nueva actividad'." />
                         </th>
                         <th className="text-center px-3 py-3 font-semibold text-[#333] text-xs">
                           Min/día con IA
