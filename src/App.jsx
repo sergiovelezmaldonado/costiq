@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -219,17 +220,39 @@ function migrateAct(a, cfg) {
 // ─── SMALL UI PRIMITIVES ─────────────────────────────────────────────────────
 function HelpTip({ text }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  // Posición fija calculada desde el botón: así ningún contenedor con overflow
+  // lo recorta, y se abre hacia el lado (y la vertical) donde realmente cabe.
+  const place = () => {
+    const r = btnRef.current?.getBoundingClientRect(); if (!r) return;
+    const W = 240, H = 140, m = 8, vw = window.innerWidth, vh = window.innerHeight;
+    let left = r.right + m; if (left + W > vw - m) left = Math.max(m, r.left - W - m);
+    if (left + W > vw - m) left = Math.max(m, vw - W - m);
+    let top = r.top; if (top + H > vh - m) top = Math.max(m, vh - H - m);
+    setPos({ left, top, width: W });
+  };
+  const show = () => { place(); setOpen(true); };
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true); window.addEventListener('resize', close);
+    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
+  }, [open]);
   return (
     <span className="relative inline-block ml-1 align-middle">
       <button
-        onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef} type="button" aria-label="Ayuda"
+        onMouseEnter={show} onMouseLeave={() => setOpen(false)}
+        onClick={() => (open ? setOpen(false) : show())}
         className="text-[#2A5B8C] font-bold text-[10px] border border-[#2A5B8C] rounded-full w-[15px] h-[15px] inline-flex items-center justify-center leading-none"
       >?</button>
-      {open && (
-        <div className="absolute z-50 bg-white border border-[#e5e5e5] rounded-lg shadow-xl p-3 text-xs text-[#333] w-56 left-5 top-0 leading-relaxed">
+      {open && pos && createPortal(
+        <div role="tooltip" style={{ position: 'fixed', ...pos }}
+          className="z-[100] bg-white border border-[#e5e5e5] rounded-lg shadow-xl p-3 text-xs text-[#333] leading-relaxed whitespace-normal text-left font-normal normal-case tracking-normal">
           {text}
-        </div>
+        </div>,
+        document.body
       )}
     </span>
   );
