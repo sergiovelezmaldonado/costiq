@@ -42,12 +42,14 @@ const CURRENCIES = [
 ];
 
 const SAMPLE_ACTIVITIES = [
-  { id:'s1', name:'Reuniones sin agenda clara',       category:'Reuniones innecesarias',         minutesPerDay:45, affectedEmployees:8,  automationPotential:'Medio', aiTimeReduction:40, minutesWithAI:null },
-  { id:'s2', name:'Buscar archivos y documentos',     category:'Búsqueda de información',        minutesPerDay:30, affectedEmployees:12, automationPotential:'Alto',  aiTimeReduction:70, minutesWithAI:9   },
-  { id:'s3', name:'Elaborar reportes manuales',       category:'Reportes y documentación',       minutesPerDay:60, affectedEmployees:5,  automationPotential:'Alto',  aiTimeReduction:80, minutesWithAI:null },
-  { id:'s4', name:'Responder correos repetitivos',    category:'Comunicación interna',           minutesPerDay:25, affectedEmployees:15, automationPotential:'Alto',  aiTimeReduction:60, minutesWithAI:null },
-  { id:'s5', name:'Captura de datos en formularios',  category:'Entrada de datos manual',        minutesPerDay:40, affectedEmployees:6,  automationPotential:'Alto',  aiTimeReduction:85, minutesWithAI:6   },
-  { id:'s6', name:'Revisiones y aprobaciones lentas', category:'Revisiones y aprobaciones',      minutesPerDay:20, affectedEmployees:10, automationPotential:'Medio', aiTimeReduction:50, minutesWithAI:null },
+  // Ejemplos con frecuencia real y origen del beneficio: la mayoría es capacidad
+  // (salario fijo); solo el cierre mensual con horas extras es caja. Así se ve el desglose.
+  { id:'s1', name:'Reuniones sin agenda clara',       category:'Reuniones innecesarias',         minutesPerRun:45,  timesPerMonth:22, affectedEmployees:8,  automationPotential:'Medio', aiTimeReduction:40, minutesWithAI:null, benefitSource:'salary' },
+  { id:'s2', name:'Buscar archivos y documentos',     category:'Búsqueda de información',        minutesPerRun:30,  timesPerMonth:22, affectedEmployees:12, automationPotential:'Alto',  aiTimeReduction:70, minutesWithAI:9,    benefitSource:'salary' },
+  { id:'s3', name:'Informe mensual para el comité',   category:'Reportes y documentación',       minutesPerRun:240, timesPerMonth:1,  affectedEmployees:2,  automationPotential:'Alto',  aiTimeReduction:60, minutesWithAI:95,   benefitSource:'salary' },
+  { id:'s4', name:'Responder correos repetitivos',    category:'Comunicación interna',           minutesPerRun:25,  timesPerMonth:22, affectedEmployees:15, automationPotential:'Alto',  aiTimeReduction:60, minutesWithAI:null, benefitSource:'salary' },
+  { id:'s5', name:'Cierre contable con horas extras', category:'Entrada de datos manual',        minutesPerRun:480, timesPerMonth:1,  affectedEmployees:3,  automationPotential:'Alto',  aiTimeReduction:50, minutesWithAI:null, benefitSource:'overtime' },
+  { id:'s6', name:'Acta de la reunión semanal',       category:'Reportes y documentación',       minutesPerRun:90,  timesPerMonth:4,  affectedEmployees:1,  automationPotential:'Alto',  aiTimeReduction:60, minutesWithAI:35,   benefitSource:'quality' },
 ];
 
 const SAMPLE_IDS = new Set(SAMPLE_ACTIVITIES.map(s => s.id));
@@ -214,7 +216,82 @@ function migrateAct(a, cfg) {
   const minutesPerRun = Math.max(1, +(a.minutesPerRun ?? legacyMin ?? 30));
   const timesPerMonth = Math.max(1, +(a.timesPerMonth ?? cfg.workDaysMonth));
   const { minutesPerDay, ...rest } = a;
-  return { ...rest, minutesPerRun, timesPerMonth };
+  const benefitSource = BENEFIT_SOURCES.some(b => b.key === a.benefitSource) ? a.benefitSource : 'unknown';
+  return { ...rest, minutesPerRun, timesPerMonth, benefitSource };
+}
+
+// ── Origen del beneficio (v3.1) ───────────────────────────────────────────
+// Mismo criterio que la hoja «Mi línea base» del Módulo 2: el usuario dice de
+// dónde saldría el beneficio y la app clasifica la vista. Las horas de alguien
+// con salario fijo son capacidad liberada, no caja, mientras nadie las reasigne.
+const BENEFIT_SOURCES = [
+  { key: 'unknown',   label: 'Todavía no lo sé',                   view: 'unclassified', short: 'Sin clasificar' },
+  { key: 'salary',    label: 'Horas de gente con salario fijo',    view: 'capacity',     short: 'Capacidad' },
+  { key: 'overtime',  label: 'Horas extras que dejo de pagar',     view: 'cash',         short: 'Caja' },
+  { key: 'vendor',    label: 'Servicio externo que reduzco',       view: 'cash',         short: 'Caja' },
+  { key: 'hire',      label: 'Contratación que evito',             view: 'cash',         short: 'Caja (proyectada)' },
+  { key: 'sales',     label: 'Más ventas o pedidos atendidos',     view: 'cash',         short: 'Caja (margen)' },
+  { key: 'quality',   label: 'Solo mejora de calidad o plazo',     view: 'quality',      short: 'No monetizado' },
+];
+const benefitOf = key => BENEFIT_SOURCES.find(b => b.key === key) || BENEFIT_SOURCES[0];
+const VIEW_STYLE = {
+  capacity:     { bg: '#eff6ff', fg: '#1d4ed8' },
+  cash:         { bg: '#f0fdf4', fg: '#15803d' },
+  quality:      { bg: '#f5f5f5', fg: '#525252' },
+  unclassified: { bg: '#fffbeb', fg: '#b45309' },
+};
+function ViewBadge({ source }) {
+  const b = benefitOf(source); const s = VIEW_STYLE[b.view];
+  return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: s.bg, color: s.fg }} title={b.label}>{b.short}</span>;
+}
+
+// Desglose del ahorro: cuánto es capacidad liberada y cuánto tiene vía de caja.
+// Es la lectura honesta del "ahorro": un comité que ve $5.000/mes y luego
+// descubre que el 90 % es tiempo de gente con salario fijo deja de creer en la cifra.
+function BenefitBreakdown({ tot, cfg, compact }) {
+  const { byView, totalSavMon, totalSavHMon } = tot;
+  if (!totalSavMon) return null;
+  const pct = v => totalSavMon ? Math.round(byView[v].sav / totalSavMon * 100) : 0;
+  const rows = [
+    { k:'capacity',     name:'Capacidad liberada',  note:'horas de salario fijo: valen si se reasignan, no reducen la nómina por sí solas' },
+    { k:'cash',         name:'Con vía de caja',     note:'gasto que deja de pagarse o ingreso adicional; pide evidencia' },
+    { k:'quality',      name:'No monetizado',       note:'mejora de calidad o plazo' },
+    { k:'unclassified', name:'Sin clasificar',      note:'indica el origen del beneficio en cada actividad' },
+  ].filter(r => byView[r.k].n > 0);
+  const mostlyCapacity = byView.capacity.sav > byView.cash.sav;
+  const unclassified = byView.unclassified.n;
+  return (
+    <div className={`bg-white border border-[#e5e5e5] rounded-xl ${compact ? 'p-4' : 'p-5'}`}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] font-bold text-[#757575] uppercase tracking-widest">¿Qué parte del ahorro es dinero?</span>
+        <span className="text-[11px] text-[#757575]">{fmtN(totalSavHMon)} h liberadas/mes</span>
+      </div>
+      <div className="h-2.5 rounded-full overflow-hidden flex bg-[#f5f5f5] mb-3">
+        {['cash','capacity','quality','unclassified'].map(k => byView[k].sav > 0 && (
+          <div key={k} style={{ width: `${pct(k)}%`, background: VIEW_STYLE[k].fg }} title={`${benefitOf(k==='cash'?'overtime':k==='capacity'?'salary':k==='quality'?'quality':'unknown').short}: ${pct(k)}%`} />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+        {rows.map(r => (
+          <div key={r.k} className="flex items-start gap-2 rounded-lg px-3 py-2" style={{ background: VIEW_STYLE[r.k].bg }}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-semibold" style={{ color: VIEW_STYLE[r.k].fg }}>{r.name}</span>
+                <span className="font-bold whitespace-nowrap" style={{ color: VIEW_STYLE[r.k].fg }}>{fmt(byView[r.k].sav, cfg.currency, 0)}/mes · {pct(r.k)}%</span>
+              </div>
+              {!compact && <div className="text-[11px] text-[#757575] leading-snug mt-0.5">{fmtN(byView[r.k].h)} h · {byView[r.k].n} actividad{byView[r.k].n !== 1 ? 'es' : ''} · {r.note}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {(mostlyCapacity || unclassified > 0) && (
+        <p className="text-[11px] text-[#333] leading-snug mt-3 border-t border-[#e5e5e5] pt-2">
+          {mostlyCapacity && <>La mayor parte del ahorro es <b>capacidad</b>: existe si alguien reasigna ese tiempo. Preséntalo como horas liberadas, no como reducción de gasto, salvo que tengas una vía de caja identificada. </>}
+          {unclassified > 0 && <>{unclassified} actividad{unclassified !== 1 ? 'es' : ''} sin origen del beneficio: edítala{unclassified !== 1 ? 's' : ''} en Actividades para completar la lectura.</>}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ─── SMALL UI PRIMITIVES ─────────────────────────────────────────────────────
@@ -370,7 +447,7 @@ export default function App() {
   const [selectedLib, setSelectedLib] = useState({});
   const [libFilter, setLibFilter] = useState('Todas');
 
-  const blankAct = { name:'', category:CATEGORIES[0], minutesPerRun:30, timesPerMonth:cfg.workDaysMonth, affectedEmployees:cfg.globalEmployees, automationPotential:'Medio', aiTimeReduction:50, minutesWithAI:null };
+  const blankAct = { name:'', category:CATEGORIES[0], minutesPerRun:30, timesPerMonth:cfg.workDaysMonth, affectedEmployees:cfg.globalEmployees, automationPotential:'Medio', aiTimeReduction:50, minutesWithAI:null, benefitSource:'salary' };
   const [draft, setDraft] = useState(blankAct);
   // Preset de frecuencia del formulario "Nueva actividad"; el dato persistido es draft.timesPerMonth
   const [freq, setFreq] = useState('daily');
@@ -403,7 +480,9 @@ export default function App() {
     const aiCostMon = aiHMon * a.affectedEmployees * cfg.hourlyCost;
     const savMon  = costMon - aiCostMon;
     const savYear = savMon * 12;
-    return { ...a, hDay, hWeek, hMon, hYear, costMon, costYear, aiHMon, aiCostMon, savMon, savYear, isMeasured, effectiveReduction };
+    const savHMon = hMon * (1 - aiRatio) * a.affectedEmployees;   // horas liberadas al mes, todas las personas
+    const view    = benefitOf(a.benefitSource).view;
+    return { ...a, hDay, hWeek, hMon, hYear, costMon, costYear, aiHMon, aiCostMon, savMon, savYear, savHMon, view, isMeasured, effectiveReduction };
   }), [acts, cfg]);
 
   const tot = useMemo(() => {
@@ -414,11 +493,29 @@ export default function App() {
     const totalCostYr  = totalCostMon * 12;
     const totalSavMon  = metrics.reduce((s, m) => s + m.savMon, 0);
     const totalSavYr   = totalSavMon * 12;
+    // Desglose del ahorro por vista: cuánto es capacidad liberada y cuánto tiene vía de caja
+    const byView = { capacity:{ sav:0, h:0, n:0 }, cash:{ sav:0, h:0, n:0 }, quality:{ sav:0, h:0, n:0 }, unclassified:{ sav:0, h:0, n:0 } };
+    for (const m of metrics) { const v = byView[m.view]; v.sav += m.savMon; v.h += m.savHMon; v.n += 1; }
+    const totalSavHMon = metrics.reduce((s, m) => s + m.savHMon, 0);
     const avgRed       = metrics.length ? metrics.reduce((s, m) => s + m.aiTimeReduction, 0) / metrics.length : 0;
     const topCost      = metrics.length ? [...metrics].sort((a,b) => b.costMon - a.costMon)[0] : null;
     const topSav       = metrics.length ? [...metrics].sort((a,b) => b.savMon  - a.savMon)[0]  : null;
-    return { totalHDay, totalHWeek, totalHMon, totalCostMon, totalCostYr, totalSavMon, totalSavYr, avgRed, topCost, topSav };
+    return { totalHDay, totalHWeek, totalHMon, totalCostMon, totalCostYr, totalSavMon, totalSavYr, totalSavHMon, byView, avgRed, topCost, topSav };
   }, [metrics]);
+
+  // Frase de desglose para la conclusión ejecutiva (pantalla y Word): dice qué parte
+  // del ahorro es capacidad y qué parte caja, para que la cifra resista preguntas.
+  const breakdownSentence = useMemo(() => {
+    const { byView, totalSavYr, totalSavHMon } = tot;
+    if (!totalSavYr) return '';
+    const cashYr = byView.cash.sav * 12, capYr = byView.capacity.sav * 12;
+    const parts = [];
+    if (capYr > 0) parts.push(`${fmt(capYr, cfg.currency)} corresponden a capacidad liberada (${fmtN(byView.capacity.h)} h/mes de personal con salario fijo), que vale si ese tiempo se reasigna y no reduce la nómina por sí sola`);
+    if (cashYr > 0) parts.push(`${fmt(cashYr, cfg.currency)} tienen una vía de caja identificada (horas extras, servicios externos, contratación evitada o ventas) y requieren evidencia`);
+    if (byView.quality.n > 0) parts.push(`${byView.quality.n} actividad${byView.quality.n !== 1 ? 'es' : ''} aporta${byView.quality.n !== 1 ? 'n' : ''} mejora de calidad o plazo sin valor monetizado`);
+    if (byView.unclassified.n > 0) parts.push(`${byView.unclassified.n} actividad${byView.unclassified.n !== 1 ? 'es' : ''} sin origen del beneficio definido`);
+    return parts.length ? `De ese valor, ${parts.join('; ')}.` : '';
+  }, [tot, cfg.currency]);
 
   const roiCalc = useMemo(() => {
     const monthlySav   = tot.totalSavMon * (roi.adoptionRate / 100);
@@ -496,7 +593,7 @@ export default function App() {
 
   // ── Export ────────────────────────────────────────────────────────────────
   const exportCSV = () => {
-    const hdr = ['Actividad','Categoría','Min por ejecución','Veces al mes','Min con IA (medido)','Empleados','Horas/mes (total)','Costo mensual','Costo anual','Costo mensual con IA','Ahorro mensual','Ahorro anual','% Reducción efectiva','Origen reducción','Potencial IA'];
+    const hdr = ['Actividad','Categoría','Min por ejecución','Veces al mes','Min con IA (medido)','Empleados','Horas/mes (total)','Costo mensual','Costo anual','Costo mensual con IA','Ahorro mensual','Ahorro anual','Horas liberadas/mes','Origen del beneficio','Vista','% Reducción efectiva','Origen reducción','Potencial IA'];
     const rows = metrics.map(m => [
       `"${m.name}"`, `"${m.category}"`, m.minutesPerRun, m.timesPerMonth,
       m.minutesWithAI != null ? m.minutesWithAI : '',
@@ -504,6 +601,7 @@ export default function App() {
       (m.hMon * m.affectedEmployees).toFixed(1),
       m.costMon.toFixed(2), m.costYear.toFixed(2),
       m.aiCostMon.toFixed(2), m.savMon.toFixed(2), m.savYear.toFixed(2),
+      m.savHMon.toFixed(1), `"${benefitOf(m.benefitSource).label}"`, benefitOf(m.benefitSource).short,
       m.effectiveReduction, m.isMeasured ? 'Medido' : 'Estimado',
       m.automationPotential,
     ]);
@@ -566,6 +664,7 @@ export default function App() {
           automationPotential: ['Alto','Medio','Bajo'].includes(a.automationPotential) ? a.automationPotential : 'Medio',
           aiTimeReduction: Math.min(100, Math.max(0, parseInt(a.aiTimeReduction) || 50)),
           minutesWithAI: (a.minutesWithAI != null && a.minutesWithAI !== '' && !isNaN(+a.minutesWithAI)) ? +a.minutesWithAI : null,
+          benefitSource: m.benefitSource,
         };
       });
       setCfg(c => ({ ...c, ...st.cfg }));
@@ -597,7 +696,28 @@ export default function App() {
         <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#2A5B8C;">${esc(fmt(m.aiCostMon, cfg.currency))}</td>
         <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#16a34a;font-weight:bold;">${esc(fmt(m.savMon, cfg.currency))}</td>
         <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;color:#16a34a;">-${m.effectiveReduction}%${m.isMeasured ? ' ✓' : ''}</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;font-size:8pt;color:${VIEW_STYLE[m.view].fg};">${esc(benefitOf(m.benefitSource).short)}</td>
       </tr>`).join('');
+
+    const bv = tot.byView;
+    const viewRow = (name, v, note) => bv[v].n ? `<tr><td style="border:1px solid #e5e5e5;padding:6px 8px;color:${VIEW_STYLE[v].fg};font-weight:bold;">${name}</td><td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">${esc(fmt(bv[v].sav, cfg.currency))}/mes</td><td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">${fmtN(bv[v].h)} h</td><td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;">${bv[v].n}</td><td style="border:1px solid #e5e5e5;padding:6px 8px;font-size:8pt;color:#757575;">${note}</td></tr>` : '';
+    const breakdownTable = tot.totalSavMon ? `
+  <h3 style="color:#b00020;border-bottom:2px solid #b00020;padding-bottom:4px;">¿Qué parte del ahorro es dinero?</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:10pt;margin-bottom:20px;">
+    <thead><tr style="background:#fff5f6;">
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:left;">Vista</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">Valor/mes</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">Horas/mes</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;">Activ.</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:left;">Cómo presentarlo</th>
+    </tr></thead>
+    <tbody>
+      ${viewRow('Capacidad liberada', 'capacity', 'Horas de personal con salario fijo. Vale si se reasigna; no reduce la nómina por sí sola.')}
+      ${viewRow('Con vía de caja', 'cash', 'Gasto que deja de pagarse o ingreso adicional. Requiere evidencia (planilla, factura, registro de ventas).')}
+      ${viewRow('No monetizado', 'quality', 'Mejora de calidad o plazo. Se reporta como indicador, no como dinero.')}
+      ${viewRow('Sin clasificar', 'unclassified', 'Falta indicar el origen del beneficio.')}
+    </tbody>
+  </table>` : '';
 
     const conclusion = roiCalc.breakEven
       ? `La inversión en IA estimada se recuperaría en aproximadamente <b>${roiCalc.breakEven} meses</b>, generando un ROI del <b>${fmtN(roiCalc.roi12, 0)}%</b> a los 12 meses.`
@@ -643,6 +763,7 @@ export default function App() {
       <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">Con IA/mes</th>
       <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;">Ahorro/mes</th>
       <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;">Reducción</th>
+      <th style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;">Vista</th>
     </tr></thead>
     <tbody>${actRows}
       <tr style="background:#fff5f6;font-weight:bold;">
@@ -651,12 +772,14 @@ export default function App() {
         <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#2A5B8C;">${esc(fmt(tot.totalCostMon - tot.totalSavMon, cfg.currency))}</td>
         <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:right;color:#16a34a;">${esc(fmt(tot.totalSavMon, cfg.currency))}</td>
         <td style="border:1px solid #e5e5e5;padding:6px 8px;text-align:center;color:#16a34a;">-${fmtN(tot.avgRed, 0)}%</td>
+        <td style="border:1px solid #e5e5e5;padding:6px 8px;"></td>
       </tr>
     </tbody>
   </table>
+  ${breakdownTable}
 
   <h3 style="color:#b00020;border-bottom:2px solid #b00020;padding-bottom:4px;">Conclusión ejecutiva</h3>
-  <p style="line-height:1.5;"><b>${esc(cfg.companyName)}</b> está perdiendo <b>${esc(fmt(tot.totalCostYr, cfg.currency))} anuales</b> en ${acts.length} actividad${acts.length !== 1 ? 'es' : ''} de baja productividad identificadas. Con la adopción de herramientas de inteligencia artificial, se estima un ahorro potencial de <b>${esc(fmt(tot.totalSavYr, cfg.currency))} por año</b> (${fmtN(tot.avgRed, 0)}% de reducción promedio en tiempo). ${conclusion}</p>
+  <p style="line-height:1.5;"><b>${esc(cfg.companyName)}</b> dedica hoy <b>${esc(fmt(tot.totalCostYr, cfg.currency))} anuales</b> (${fmtN(tot.totalHMon)} h/mes) a ${acts.length} actividad${acts.length !== 1 ? 'es' : ''} registradas. Con IA, el tiempo liberado vale <b>${esc(fmt(tot.totalSavYr, cfg.currency))} por año</b> (${fmtN(tot.totalSavHMon)} h/mes, ${fmtN(tot.avgRed, 0)}% de reducción promedio). ${esc(breakdownSentence)} ${conclusion}</p>
   ${tot.topCost ? `<p style="font-size:9pt;color:#757575;">La actividad de mayor costo es <b>"${esc(tot.topCost.name)}"</b> con un impacto de <b>${esc(fmt(tot.topCost.costMon, cfg.currency))}/mes</b> (${esc(fmt(tot.topCost.costYear, cfg.currency))}/año).</p>` : ''}
   <p style="font-size:8pt;color:#b00020;margin-top:14px;">* Los cálculos son estimaciones basadas en los datos ingresados. Los resultados reales dependerán de la herramienta seleccionada, la tasa de adopción del equipo y la calidad de implementación.</p>
   <p style="font-size:8pt;color:#757575;border-top:1px solid #e5e5e5;padding-top:8px;margin-top:18px;">Generado con CostIQ — una herramienta de FuturIA · futuria.substack.com</p>
@@ -980,6 +1103,7 @@ export default function App() {
                   { term: 'Inversión inicial única', def: 'Gastos que solo ocurren una vez: licencias perpetuas, consultoría de implementación, configuración inicial, capacitación del equipo.' },
                   { term: 'Costo mensual recurrente', def: 'Suscripciones mensuales a herramientas IA: ChatGPT Plus ($20/usuario), Microsoft 365 Copilot ($30/usuario), Zapier, Make, etc.' },
                   { term: 'Min. con IA (medido)', def: 'Tiempo real que toma una ejecución de la actividad cuando ya se usa IA, incluida la revisión. Si lo ingresas, el % de ahorro se calcula desde ese dato real (más preciso). Si no, se usa el estimado del slider.' },
+                  { term: 'Capacidad vs. caja', def: 'No toda hora ahorrada es dinero. Las horas de personal con salario fijo son capacidad liberada: valen si alguien las reasigna, pero no reducen la nómina. Solo hay caja cuando dejas de pagar algo (horas extras, un proveedor, una contratación) o vendes más, y eso pide evidencia. CostIQ separa ambas en el Dashboard y en el Reporte.' },
                   { term: 'Reducción medida vs estimada', def: 'Medida (✓): calculada desde el tiempo real observado con IA. Estimada: basada en el porcentaje manual del slider. El badge verde oscuro con ✓ indica dato medido.' },
                 ].map(g => (
                   <div key={g.term} className="bg-gray-50 rounded-lg p-3">
@@ -1077,8 +1201,8 @@ export default function App() {
               <div className="mb-6">
                 <p className="text-[10px] font-bold text-[#757575] uppercase tracking-widest mb-2">Proyección · Con IA</p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <KPI label="Ahorro mensual estimado" value={fmt(tot.totalSavMon, cfg.currency)}  sub={`adoptando herramientas IA`}     color={C.green} icon="✅" highlight
-                    help="Cuánto dejarías de perder cada mes al aplicar IA a las actividades registradas. Es la diferencia entre el costo actual y el costo proyectado con IA. Depende del % de reducción estimado en cada actividad." />
+                  <KPI label="Ahorro mensual estimado" value={fmt(tot.totalSavMon, cfg.currency)}  sub={tot.byView.cash.sav > 0 ? `${fmt(tot.byView.cash.sav, cfg.currency, 0)} con vía de caja` : 'valor del tiempo liberado'}     color={C.green} icon="✅" highlight
+                    help="Valor del tiempo que se liberaría al aplicar IA, a la tarifa de costo/hora. No todo es dinero: la parte que corresponde a gente con salario fijo es capacidad (vale si se reasigna). El desglose de abajo separa capacidad de caja." />
                   <KPI label="Ahorro anual estimado"   value={fmt(tot.totalSavYr, cfg.currency)}   sub="proyección 12 meses"             color={C.green} icon="🚀"
                     help="El ahorro mensual proyectado multiplicado por 12. Representa el valor total que generaría la adopción de IA en un año completo, sin contar el costo de las herramientas." />
                   <KPI label="Reducción promedio"      value={`${fmtN(tot.avgRed, 0)}%`}           sub="en tiempo por actividad"         color={C.green} icon="📉"
@@ -1086,6 +1210,7 @@ export default function App() {
                   <KPI label="Break-even"              value={roiCalc.breakEven ? `Mes ${roiCalc.breakEven}` : 'N/A'} sub="meses para recuperar inversión" color={roiCalc.breakEven ? C.blue : '#757575'} icon="⚡"
                     help="El mes en que los ahorros acumulados superan la inversión total en IA. Antes de ese mes, la empresa va en pérdida neta. A partir de ahí, cada mes genera valor positivo. Configura los costos de inversión en la pestaña ROI." />
                 </div>
+                <div className="mt-3"><BenefitBreakdown tot={tot} cfg={cfg} /></div>
               </div>
             )}
 
@@ -1241,6 +1366,11 @@ export default function App() {
                   <Fld label="Min. con IA por ejecución (opcional)" help="Si ya mediste cuánto tarda esta actividad cuando se usa IA — incluyendo revisar y corregir — ingrésalo aquí. El % de ahorro se calculará desde datos reales, más preciso que la estimación. Déjalo vacío si aún no has medido.">
                     <input type="number" min="0" placeholder="Ej: 9 (opcional)" className={inp} value={draft.minutesWithAI ?? ''} onChange={e => setDraft(p => ({ ...p, minutesWithAI: e.target.value === '' ? null : +e.target.value }))} />
                   </Fld>
+                  <Fld label="¿De dónde saldría el beneficio?" help="No toda hora ahorrada es dinero. Si quien hace la actividad tiene salario fijo, el tiempo liberado es capacidad: vale si alguien lo reasigna, pero no reduce la nómina por sí solo. Solo hay caja cuando dejas de pagar algo (horas extras, un proveedor, una contratación) o vendes más.">
+                    <select className={inp} value={draft.benefitSource} onChange={e => setDraft(p => ({ ...p, benefitSource: e.target.value }))}>
+                      {BENEFIT_SOURCES.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
+                    </select>
+                  </Fld>
                 </div>
                 {/* Preview calc */}
                 {draft.name && draft.minutesPerRun > 0 && draft.timesPerMonth > 0 && draft.affectedEmployees > 0 && (
@@ -1299,6 +1429,10 @@ export default function App() {
                           Potencial IA
                           <HelpTip text="¿Qué tan fácil es automatizar esta actividad con IA hoy? Alto = herramientas disponibles y listas, Medio = requiere configuración, Bajo = automatización parcial." />
                         </th>
+                        <th className="text-center px-3 py-3 font-semibold text-[#333] text-xs hidden lg:table-cell">
+                          Vista
+                          <HelpTip text="Qué tipo de valor produce el ahorro. Capacidad: horas de salario fijo que quedan libres (no es caja hasta que se reasignan). Caja: un gasto que deja de pagarse o un ingreso adicional, con evidencia. No monetizado: mejora de calidad o plazo sin valor en dinero." />
+                        </th>
                         <th className="text-center px-3 py-3 font-semibold text-[#333] text-xs">
                           % Ahorro con IA
                           <HelpTip text="Porcentaje del tiempo que se estima reducir al aplicar IA a esta actividad. Por ejemplo, 70% significa que una tarea que toma 30 min pasaría a tomar ~9 min." />
@@ -1345,6 +1479,14 @@ export default function App() {
                           <td className="px-3 py-3 text-right font-bold text-[#b00020] text-xs">{fmt(m.costMon, cfg.currency)}</td>
                           <td className="px-3 py-3 text-right text-xs text-[#757575] hidden sm:table-cell">{fmt(m.costYear, cfg.currency)}</td>
                           <td className="px-3 py-3 text-center"><PotBadge v={m.automationPotential} /></td>
+                          <td className="px-3 py-3 text-center hidden lg:table-cell">
+                            {editing === m.id
+                              ? <select className={inp + ' py-1 text-[11px]'} value={m.benefitSource} onChange={e => updAct(m.id, 'benefitSource', e.target.value)}>
+                                  {BENEFIT_SOURCES.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
+                                </select>
+                              : <ViewBadge source={m.benefitSource} />
+                            }
+                          </td>
                           <td className="px-3 py-3 text-center">
                             {editing === m.id
                               ? <input type="number" min="0" max="100" className={inp + ' py-1 w-16 text-xs text-center'} value={m.aiTimeReduction} onChange={e => updAct(m.id, 'aiTimeReduction', +e.target.value)} />
@@ -1410,9 +1552,10 @@ export default function App() {
                   <div className="bg-[#f0fdf4] border-2 border-[#16a34a] rounded-xl p-5 text-center">
                     <div className="text-[10px] text-[#757575] font-bold uppercase tracking-widest mb-1">AHORRO POTENCIAL</div>
                     <div className="text-3xl font-black text-[#16a34a]">{fmt(tot.totalSavMon, cfg.currency)}/mes</div>
-                    <div className="text-xs text-[#757575] mt-1">{fmt(tot.totalSavYr, cfg.currency)}/año · -{fmtN(tot.avgRed,0)}% prom.</div>
+                    <div className="text-xs text-[#757575] mt-1">{fmt(tot.totalSavYr, cfg.currency)}/año · {fmtN(tot.totalSavHMon)} h liberadas/mes</div>
                   </div>
                 </div>
+                <div className="mb-6"><BenefitBreakdown tot={tot} cfg={cfg} compact /></div>
 
                 {/* Horizontal bar chart */}
                 <Card title="Comparación por actividad (costo mensual)" help="Barras paralelas para cada actividad: rojo = costo actual (Sin IA), azul = costo proyectado (Con IA). La diferencia entre ambas barras es el ahorro potencial mensual de esa actividad.">
@@ -1854,10 +1997,11 @@ export default function App() {
               <div className="bg-[#fff5f6] border border-[#b00020] rounded-xl p-5">
                 <p className="font-bold text-[#b00020] mb-2">Conclusión ejecutiva</p>
                 <p className="text-sm text-[#333] leading-relaxed">
-                  <strong>{cfg.companyName}</strong> está perdiendo{' '}
-                  <strong>{fmt(tot.totalCostYr, cfg.currency)} anuales</strong> en {acts.length} actividad{acts.length !== 1 ? 'es' : ''}{' '}
-                  de baja productividad identificadas. Con la adopción de herramientas de inteligencia artificial, se estima un ahorro potencial de{' '}
-                  <strong>{fmt(tot.totalSavYr, cfg.currency)} por año</strong> ({fmtN(tot.avgRed, 0)}% de reducción promedio en tiempo).{' '}
+                  <strong>{cfg.companyName}</strong> dedica hoy{' '}
+                  <strong>{fmt(tot.totalCostYr, cfg.currency)} anuales</strong> ({fmtN(tot.totalHMon)} h/mes) a {acts.length} actividad{acts.length !== 1 ? 'es' : ''}{' '}
+                  registradas. Con IA, el tiempo liberado vale{' '}
+                  <strong>{fmt(tot.totalSavYr, cfg.currency)} por año</strong> ({fmtN(tot.totalSavHMon)} h/mes, {fmtN(tot.avgRed, 0)}% de reducción promedio).{' '}
+                  {breakdownSentence}{' '}
                   {roiCalc.breakEven
                     ? `La inversión en IA estimada se recuperaría en aproximadamente ${roiCalc.breakEven} meses, generando un ROI del ${fmtN(roiCalc.roi12, 0)}% a los 12 meses.`
                     : 'Ajusta los parámetros de inversión en la pestaña ROI para calcular el período de retorno.'}
