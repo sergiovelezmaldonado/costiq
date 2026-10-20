@@ -184,6 +184,38 @@ function usePersisted(key, init) {
   return [val, set];
 }
 
+// ── Modelo de frecuencia (v3) ──────────────────────────────────────────────
+// Cada actividad guarda minutesPerRun (minutos por ejecución) y timesPerMonth
+// (veces al mes). horas/mes = minutesPerRun × timesPerMonth ÷ 60.
+// Los datos anteriores solo traían minutesPerDay y se asumía que ocurrían
+// todos los días laborales: se migran con timesPerMonth = días laborales/mes,
+// lo que reproduce exactamente el costo que esas personas ya habían visto.
+const FREQ_PRESETS = [
+  { key: 'daily',     label: 'Diaria (cada día laboral)', times: cfg => cfg.workDaysMonth },
+  { key: 'weekly',    label: 'Semanal',                   times: () => 4 },
+  { key: 'biweekly',  label: 'Quincenal',                 times: () => 2 },
+  { key: 'monthly',   label: 'Mensual',                   times: () => 1 },
+  { key: 'custom',    label: 'Otra (veces al mes)',       times: null },
+];
+const freqKeyFor = (times, cfg) => {
+  if (times === cfg.workDaysMonth) return 'daily';
+  if (times === 4) return 'weekly';
+  if (times === 2) return 'biweekly';
+  if (times === 1) return 'monthly';
+  return 'custom';
+};
+const freqLabel = (times, cfg) => {
+  const k = freqKeyFor(times, cfg);
+  return k === 'custom' ? `${times}×/mes` : FREQ_PRESETS.find(p => p.key === k).label.replace(' (cada día laboral)', '');
+};
+function migrateAct(a, cfg) {
+  const legacyMin = a.minutesPerDay;
+  const minutesPerRun = Math.max(1, +(a.minutesPerRun ?? legacyMin ?? 30));
+  const timesPerMonth = Math.max(1, +(a.timesPerMonth ?? cfg.workDaysMonth));
+  const { minutesPerDay, ...rest } = a;
+  return { ...rest, minutesPerRun, timesPerMonth };
+}
+
 // ─── SMALL UI PRIMITIVES ─────────────────────────────────────────────────────
 function HelpTip({ text }) {
   const [open, setOpen] = useState(false);
@@ -293,7 +325,10 @@ export default function App() {
     currency: 'USD',
   });
 
-  const [acts, setActs] = usePersisted('ciq-acts-v2', SAMPLE_ACTIVITIES);
+  const [rawActs, setActs] = usePersisted('ciq-acts-v2', SAMPLE_ACTIVITIES);
+  // Migración transparente: actividades guardadas con el modelo anterior
+  // (minutesPerDay, sin frecuencia) se leen como "diarias" y conservan su costo.
+  const acts = useMemo(() => rawActs.map(a => migrateAct(a, cfg)), [rawActs, cfg.workDaysMonth]);
 
   const [roi, setRoi] = usePersisted('ciq-roi-v2', {
     aiToolMonthly: 200,
@@ -312,10 +347,15 @@ export default function App() {
   const [selectedLib, setSelectedLib] = useState({});
   const [libFilter, setLibFilter] = useState('Todas');
 
-  const blankAct = { name:'', category:CATEGORIES[0], minutesPerDay:30, affectedEmployees:cfg.globalEmployees, automationPotential:'Medio', aiTimeReduction:50, minutesWithAI:null };
+  const blankAct = { name:'', category:CATEGORIES[0], minutesPerRun:30, timesPerMonth:cfg.workDaysMonth, affectedEmployees:cfg.globalEmployees, automationPotential:'Medio', aiTimeReduction:50, minutesWithAI:null };
   const [draft, setDraft] = useState(blankAct);
-  // Frecuencia de entrada del formulario "Nueva actividad" — solo UI, siempre se guarda como minutesPerDay
+  // Preset de frecuencia del formulario "Nueva actividad"; el dato persistido es draft.timesPerMonth
   const [freq, setFreq] = useState('daily');
+  const applyFreq = (key) => {
+    setFreq(key);
+    const p = FREQ_PRESETS.find(x => x.key === key);
+    if (p?.times) setDraft(d => ({ ...d, timesPerMonth: p.times(cfg) }));
+  };
 
   const curr = CURRENCIES.find(c => c.code === cfg.currency) || CURRENCIES[0];
 
@@ -324,15 +364,17 @@ export default function App() {
 
   // ── Calculations ──────────────────────────────────────────────────────────
   const metrics = useMemo(() => acts.map(a => {
-    const hDay  = a.minutesPerDay / 60;
+    // horas/mes reales = minutos por ejecución × veces al mes ÷ 60.
+    // Diario y semanal son prorrateos del mes (solo para la tira de escala).
+    const hMon  = (a.minutesPerRun * a.timesPerMonth) / 60;
+    const hDay  = hMon / cfg.workDaysMonth;
     const hWeek = hDay * cfg.workDaysWeek;
-    const hMon  = hDay * cfg.workDaysMonth;
     const hYear = hMon * 12;
     const costMon  = hMon  * a.affectedEmployees * cfg.hourlyCost;
     const costYear = costMon * 12;
     // If measured AI time exists, derive reduction from it; otherwise use estimated slider
-    const isMeasured = a.minutesWithAI != null && a.minutesWithAI >= 0 && a.minutesWithAI < a.minutesPerDay;
-    const aiRatio    = isMeasured ? a.minutesWithAI / a.minutesPerDay : (1 - a.aiTimeReduction / 100);
+    const isMeasured = a.minutesWithAI != null && a.minutesWithAI >= 0 && a.minutesWithAI < a.minutesPerRun;
+    const aiRatio    = isMeasured ? a.minutesWithAI / a.minutesPerRun : (1 - a.aiTimeReduction / 100);
     const effectiveReduction = Math.round((1 - aiRatio) * 100);
     const aiHMon    = hMon * aiRatio;
     const aiCostMon = aiHMon * a.affectedEmployees * cfg.hourlyCost;
@@ -402,7 +444,7 @@ export default function App() {
   // ── Activity CRUD ─────────────────────────────────────────────────────────
   const addAct = () => {
     if (!draft.name.trim()) return;
-    setActs(p => [...p, { ...draft, id: uid() }]);
+    setActs(p => [...p, { ...draft, timesPerMonth: Math.max(1, +draft.timesPerMonth || 1), id: uid() }]);
     setDraft(blankAct);
     setFreq('daily');
     setAddOpen(false);
@@ -431,9 +473,9 @@ export default function App() {
 
   // ── Export ────────────────────────────────────────────────────────────────
   const exportCSV = () => {
-    const hdr = ['Actividad','Categoría','Min/día','Min con IA (medido)','Empleados','Horas/mes (total)','Costo mensual','Costo anual','Costo mensual con IA','Ahorro mensual','Ahorro anual','% Reducción efectiva','Origen reducción','Potencial IA'];
+    const hdr = ['Actividad','Categoría','Min por ejecución','Veces al mes','Min con IA (medido)','Empleados','Horas/mes (total)','Costo mensual','Costo anual','Costo mensual con IA','Ahorro mensual','Ahorro anual','% Reducción efectiva','Origen reducción','Potencial IA'];
     const rows = metrics.map(m => [
-      `"${m.name}"`, `"${m.category}"`, m.minutesPerDay,
+      `"${m.name}"`, `"${m.category}"`, m.minutesPerRun, m.timesPerMonth,
       m.minutesWithAI != null ? m.minutesWithAI : '',
       m.affectedEmployees,
       (m.hMon * m.affectedEmployees).toFixed(1),
@@ -451,7 +493,7 @@ export default function App() {
 
   const exportJSON = () => {
     const data = {
-      app: 'CostIQ', version: 2,
+      app: 'CostIQ', version: 3,
       empresa: cfg.companyName, departamento: cfg.department,
       fecha: new Date().toLocaleDateString('es-MX'),
       // Bloque restaurable — lo lee "Cargar análisis"
@@ -486,16 +528,23 @@ export default function App() {
       }
       if (acts.length > 0 && !isSampleData &&
           !window.confirm('Esto reemplazará el análisis actual con el del archivo. ¿Continuar?')) return;
-      const clean = st.acts.filter(a => a && a.name).map(a => ({
-        id: a.id || uid(),
-        name: String(a.name),
-        category: CATEGORIES.includes(a.category) ? a.category : CATEGORIES[0],
-        minutesPerDay: Math.max(1, parseInt(a.minutesPerDay) || 30),
-        affectedEmployees: Math.max(1, parseInt(a.affectedEmployees) || 1),
-        automationPotential: ['Alto','Medio','Bajo'].includes(a.automationPotential) ? a.automationPotential : 'Medio',
-        aiTimeReduction: Math.min(100, Math.max(0, parseInt(a.aiTimeReduction) || 50)),
-        minutesWithAI: (a.minutesWithAI != null && a.minutesWithAI !== '' && !isNaN(+a.minutesWithAI)) ? +a.minutesWithAI : null,
-      }));
+      // Los archivos v2 traen minutesPerDay sin frecuencia: se leen como diarios
+      // con los días laborales del archivo (no los actuales) para conservar su costo.
+      const fileCfg = { ...cfg, ...st.cfg };
+      const clean = st.acts.filter(a => a && a.name).map(a => {
+        const m = migrateAct(a, fileCfg);
+        return {
+          id: a.id || uid(),
+          name: String(a.name),
+          category: CATEGORIES.includes(a.category) ? a.category : CATEGORIES[0],
+          minutesPerRun: Math.max(1, parseFloat(m.minutesPerRun) || 30),
+          timesPerMonth: Math.max(1, parseFloat(m.timesPerMonth) || 1),
+          affectedEmployees: Math.max(1, parseInt(a.affectedEmployees) || 1),
+          automationPotential: ['Alto','Medio','Bajo'].includes(a.automationPotential) ? a.automationPotential : 'Medio',
+          aiTimeReduction: Math.min(100, Math.max(0, parseInt(a.aiTimeReduction) || 50)),
+          minutesWithAI: (a.minutesWithAI != null && a.minutesWithAI !== '' && !isNaN(+a.minutesWithAI)) ? +a.minutesWithAI : null,
+        };
+      });
       setCfg(c => ({ ...c, ...st.cfg }));
       setActs(clean);
       if (st.roi) setRoi(r => ({ ...r, ...st.roi }));
@@ -603,30 +652,33 @@ export default function App() {
     const hdrRow = cols => nr(cols.map(c => nc(c,'String','H')).join(''));
 
     // Sheet 1: template with examples
-    const s1cols = ['Actividad','Categoría','Min/día','Empleados afectados','Potencial IA (Alto/Medio/Bajo)','% Reducción estimada con IA','Min con IA (opcional - tiempo real medido)'];
+    // La columna 8 (Veces al mes) va al final para que las plantillas anteriores
+    // de 7 columnas sigan importando: sin ese dato se asume actividad diaria.
+    const s1cols = ['Actividad','Categoría','Min por ejecución','Empleados afectados','Potencial IA (Alto/Medio/Bajo)','% Reducción estimada con IA','Min con IA (opcional - tiempo real medido)',`Veces al mes (diaria = ${cfg.workDaysMonth}, semanal = 4, mensual = 1)`];
     const s1ex = [
-      ['Reuniones sin agenda clara','Reuniones innecesarias',45,8,'Medio',40,''],
-      ['Buscar archivos y documentos','Búsqueda de información',30,12,'Alto',70,9],
-      ['Elaborar reportes manuales','Reportes y documentación',60,5,'Alto',80,''],
-      ['Tu actividad aquí','Categoría',30,5,'Alto',60,''],
+      ['Reuniones sin agenda clara','Reuniones innecesarias',45,8,'Medio',40,'',cfg.workDaysMonth],
+      ['Buscar archivos y documentos','Búsqueda de información',30,12,'Alto',70,9,cfg.workDaysMonth],
+      ['Informe mensual para el comité','Reportes y documentación',240,1,'Alto',60,95,1],
+      ['Acta de la reunión semanal de equipo','Reportes y documentación',90,1,'Alto',60,35,4],
+      ['Tu actividad aquí','Categoría',30,5,'Alto',60,'',cfg.workDaysMonth],
     ];
     const s1rows = [
       hdrRow(s1cols),
       ...s1ex.map(r => nr([
         nc(r[0]), nc(r[1]), nc(r[2],'Number'), nc(r[3],'Number'),
-        nc(r[4]), nc(r[5],'Number'), nc(r[6] !== '' ? r[6] : ''),
+        nc(r[4]), nc(r[5],'Number'), nc(r[6] !== '' ? r[6] : ''), nc(r[7],'Number'),
       ].join(''))),
     ].join('\n   ');
 
     // Sheet 2: 60 reference activities from library
-    const s2cols = ['Área','Actividad','Categoría','Min/día','Empleados','Potencial IA','% Reducción estimada'];
+    const s2cols = ['Área','Actividad','Categoría','Min por ejecución','Empleados','Potencial IA','% Reducción estimada','Veces al mes'];
     const s2rows = [
       hdrRow(s2cols),
       ...ACTIVITY_LIBRARY.flatMap(area =>
         area.activities.map(act => nr([
           nc(area.area), nc(act.name), nc(act.category),
           nc(act.minutesPerDay,'Number'), nc(act.affectedEmployees,'Number'),
-          nc(act.automationPotential), nc(act.aiTimeReduction,'Number'),
+          nc(act.automationPotential), nc(act.aiTimeReduction,'Number'), nc(cfg.workDaysMonth,'Number'),
         ].join('')))
       ),
     ].join('\n   ');
@@ -680,7 +732,10 @@ export default function App() {
         const mAIRaw = cols[6] !== undefined && cols[6] !== '' ? parseInt(cols[6]) : null;
         const mAI = (mAIRaw != null && !isNaN(mAIRaw) && mAIRaw >= 0 && mAIRaw < min) ? mAIRaw : null;
         const cat = CATEGORIES.includes(cols[1]) ? cols[1] : CATEGORIES[0];
-        parsed.push({ id: uid(), name: cols[0], category: cat, minutesPerDay: min, affectedEmployees: emp, automationPotential: pot, aiTimeReduction: red, minutesWithAI: mAI });
+        // Columna 8 opcional: veces al mes. Plantillas antiguas (7 columnas) → diaria.
+        const tpmRaw = cols[7] !== undefined && cols[7] !== '' ? parseFloat(cols[7]) : NaN;
+        const tpm = !isNaN(tpmRaw) && tpmRaw > 0 ? tpmRaw : cfg.workDaysMonth;
+        parsed.push({ id: uid(), name: cols[0], category: cat, minutesPerRun: min, timesPerMonth: tpm, affectedEmployees: emp, automationPotential: pot, aiTimeReduction: red, minutesWithAI: mAI });
       }
       if (parsed.length === 0) { alert('No se encontraron actividades válidas. Revisa que el archivo use la plantilla de CostIQ.'); return; }
       if (window.confirm(`¿Importar ${parsed.length} actividad${parsed.length !== 1 ? 'es' : ''}?${acts.length > 0 ? ' Se agregarán a las existentes.' : ''}`)) {
@@ -787,7 +842,7 @@ export default function App() {
                   title: 'Registra las actividades ineficientes',
                   desc: 'Agrega cada tarea que consume tiempo sin generar valor. Puedes hacerlo una a una, usando la 📚 Biblioteca con 60 actividades de referencia por área, o importando directamente el archivo Excel de plantilla.',
                   tip: '💡 Descarga la Plantilla Excel (2 pestañas: formulario + 60 actividades de referencia), complétala y luego usa "Importar archivo" para cargarla.',
-                  fields: ['Nueva actividad', 'Frecuencia diaria/semanal', '📚 Biblioteca (60+)', '📥 Plantilla Excel', '📤 Importar .xls/.csv', 'Min. con IA (medido)'],
+                  fields: ['Nueva actividad', 'Minutos por ejecución', 'Frecuencia (veces al mes)', '📚 Biblioteca (60)', '📥 Plantilla Excel', '📤 Importar .xls/.csv', 'Min. con IA (medido)'],
                 },
                 {
                   step: '3', icon: '📊', tab: 'dashboard', color: '#d97706', bg: '#fef9c3',
@@ -891,8 +946,8 @@ export default function App() {
             <Card title="Glosario rápido — ¿Qué significa cada término?">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
                 {[
-                  { term: 'Costo mensual (Sin IA)', def: 'El dinero que pierde tu empresa cada mes en tiempo improductivo. Se calcula: minutos/día × días/mes × empleados afectados × costo/hora.' },
-                  { term: 'Frecuencia (diario/semanal)', def: 'Al crear una actividad, indica si el tiempo perdido se mide por día o por semana (ej. una reunión semanal). Si eliges "Por semana", CostIQ divide el dato entre los días laborales/semana configurados para obtener el promedio diario que usa el cálculo — ya no hace falta dividir a mano.' },
+                  { term: 'Costo mensual (Sin IA)', def: 'Lo que cuesta hoy la actividad cada mes. Se calcula: (minutos por ejecución × veces al mes ÷ 60) × empleados afectados × costo/hora.' },
+                  { term: 'Frecuencia (veces al mes)', def: 'Cuántas veces al mes ocurre la actividad. Es el dato que convierte minutos en horas reales: un informe de 4 horas que se hace una vez al mes cuesta 4 horas, no 88. Diaria = los días laborales de Configuración; semanal = 4; mensual = 1; o escribe el número exacto.' },
                   { term: 'Reducción con IA (%)', def: 'Porcentaje del tiempo que se estima reducir aplicando herramientas de IA a esa actividad. Alto potencial = 60-85%, Medio = 30-60%, Bajo = 10-30%.' },
                   { term: 'Potencial de automatización', def: 'Clasificación del nivel de facilidad para automatizar la actividad: Alto (se puede automatizar con herramientas disponibles hoy), Medio (requiere configuración), Bajo (automatización parcial).' },
                   { term: 'Ahorro mensual con IA', def: 'Diferencia entre el costo actual y el costo proyectado después de implementar IA. Es el dinero que dejarías de perder cada mes.' },
@@ -901,7 +956,7 @@ export default function App() {
                   { term: 'ROI a 12/24 meses', def: 'Retorno sobre la inversión. Fórmula: (ahorro acumulado − inversión acumulada) ÷ inversión acumulada × 100. Un ROI positivo significa que ganaste más de lo que invertiste.' },
                   { term: 'Inversión inicial única', def: 'Gastos que solo ocurren una vez: licencias perpetuas, consultoría de implementación, configuración inicial, capacitación del equipo.' },
                   { term: 'Costo mensual recurrente', def: 'Suscripciones mensuales a herramientas IA: ChatGPT Plus ($20/usuario), Microsoft 365 Copilot ($30/usuario), Zapier, Make, etc.' },
-                  { term: 'Min. con IA (medido)', def: 'Tiempo real que toma la actividad cuando ya se usa IA, expresado en minutos/día. Si lo ingresas, el % de ahorro se calcula desde ese dato real (más preciso). Si no, se usa el estimado del slider.' },
+                  { term: 'Min. con IA (medido)', def: 'Tiempo real que toma una ejecución de la actividad cuando ya se usa IA, incluida la revisión. Si lo ingresas, el % de ahorro se calcula desde ese dato real (más preciso). Si no, se usa el estimado del slider.' },
                   { term: 'Reducción medida vs estimada', def: 'Medida (✓): calculada desde el tiempo real observado con IA. Estimada: basada en el porcentaje manual del slider. El badge verde oscuro con ✓ indica dato medido.' },
                 ].map(g => (
                   <div key={g.term} className="bg-gray-50 rounded-lg p-3">
@@ -954,7 +1009,7 @@ export default function App() {
             <div className="mb-5">
               <p className="text-[10px] font-bold text-[#757575] uppercase tracking-widest mb-2">
                 Escala del tiempo perdido
-                <HelpTip text="El mismo tiempo improductivo diario, proyectado a distintos horizontes. Suma las horas de todas las actividades y todas las personas afectadas. Semanal usa los 'días laborales/semana' de Configuración; mensual usa los 'días laborales/mes'." />
+                <HelpTip text="Las horas al mes de todas las actividades y personas, calculadas con la frecuencia real de cada una. Diario y semanal son prorrateos de ese total (días laborales de Configuración); anual es ×12." />
               </p>
               <div className="bg-[#fff5f6] border border-[#e5e5e5] rounded-2xl p-4 flex flex-wrap items-center justify-around gap-2 text-center">
                 <div className="px-3">
@@ -984,11 +1039,11 @@ export default function App() {
               <p className="text-[10px] font-bold text-[#757575] uppercase tracking-widest mb-2">Estado actual · Sin IA</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                 <KPI label="Costo mensual total"  value={fmt(tot.totalCostMon, cfg.currency)}  sub="en tiempo improductivo"             color={C.red}   icon="💸" highlight
-                  help="Cuánto dinero pierde tu empresa cada mes en actividades de baja productividad. Se calcula sumando: (minutos/día ÷ 60) × días laborales/mes × personas afectadas × costo/hora, para cada actividad." />
+                  help="Cuánto cuestan hoy, cada mes, las actividades registradas. Se calcula sumando: (minutos por ejecución × veces al mes ÷ 60) × personas afectadas × costo/hora, para cada actividad." />
                 <KPI label="Costo anual total"    value={fmt(tot.totalCostYr, cfg.currency)}   sub="proyección a 12 meses"              color={C.red}   icon="📅"
                   help="Proyección del costo mensual multiplicado por 12. Es el impacto anual total de mantener las ineficiencias actuales sin ningún cambio." />
                 <KPI label="Horas perdidas/mes"   value={`${fmtN(tot.totalHMon)}h`}            sub="suma total todos los empleados"     color="#d97706" icon="⏰"
-                  help="Total de horas improductivas al mes sumando todos los empleados afectados en todas las actividades. Si son 10 personas perdiendo 1h/día cada una, el total son 220h/mes (10 × 22 días)." />
+                  help="Total de horas al mes sumando todos los empleados afectados en todas las actividades, con la frecuencia real de cada una. Un informe de 4 h que se hace una vez al mes aporta 4 h; una tarea diaria de 1 h, 22 h." />
                 <KPI label="Actividades"          value={acts.length}                           sub={tot.topCost ? `Más costosa: ${tot.topCost.name.slice(0,18)}…` : '—'} color={C.blue} icon="📋"
                   help="Número de actividades ineficientes registradas. Cuantas más registres, más preciso será el análisis. Se muestra también cuál es la que genera mayor costo mensual." />
               </div>
@@ -1131,27 +1186,19 @@ export default function App() {
                       {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </Fld>
-                  <Fld label="Frecuencia" help="¿La actividad ocurre todos los días o una vez por semana (ej. una reunión semanal)? CostIQ convierte el dato al promedio diario que usa el cálculo — ya no hace falta dividir a mano.">
-                    <select className={inp} value={freq} onChange={e => setFreq(e.target.value)}>
-                      <option value="daily">Por día</option>
-                      <option value="weekly">Por semana</option>
+                  <Fld label="Minutos por ejecución" help="Cuánto tarda la actividad cada vez que se hace, de principio a fin (una reunión, un informe, una cotización). No lo promedies al día: la frecuencia va en el siguiente campo.">
+                    <input type="number" min="1" max="3000" className={inp} value={draft.minutesPerRun} onChange={e => setDraft(p => ({ ...p, minutesPerRun: +e.target.value }))} />
+                  </Fld>
+                  <Fld label="Frecuencia" help={`¿Cada cuánto ocurre? Diaria = cada día laboral (${cfg.workDaysMonth} veces al mes según Configuración). Un informe mensual ocurre 1 vez; una reunión semanal, 4. Este dato es el que convierte los minutos en horas al mes.`}>
+                    <select className={inp} value={freq} onChange={e => applyFreq(e.target.value)}>
+                      {FREQ_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
                     </select>
                   </Fld>
-                  <Fld
-                    label={freq === 'weekly' ? 'Minutos perdidos por semana' : 'Minutos perdidos por día'}
-                    help={freq === 'weekly'
-                      ? `Tiempo total que cada empleado afectado pierde en esta actividad a la semana (ej. una reunión semanal de 60 min). Se divide entre los ${cfg.workDaysWeek} días laborales/semana configurados para obtener el promedio diario.`
-                      : 'Tiempo promedio que cada empleado afectado pierde en esta actividad por día laboral.'}
-                  >
-                    <input
-                      type="number" min="1" max={freq === 'weekly' ? 3000 : 480} className={inp}
-                      value={freq === 'weekly' ? Math.round(draft.minutesPerDay * cfg.workDaysWeek) : draft.minutesPerDay}
-                      onChange={e => {
-                        const v = +e.target.value;
-                        setDraft(p => ({ ...p, minutesPerDay: freq === 'weekly' ? +(v / cfg.workDaysWeek).toFixed(2) : v }));
-                      }}
-                    />
-                  </Fld>
+                  {freq === 'custom' && (
+                    <Fld label="Veces al mes" help="Número de veces que la actividad se realiza en un mes típico.">
+                      <input type="number" min="1" max="500" className={inp} value={draft.timesPerMonth} onChange={e => setDraft(p => ({ ...p, timesPerMonth: +e.target.value }))} />
+                    </Fld>
+                  )}
                   <Fld label="Empleados afectados" help="¿Cuántas personas en tu empresa realizan esta actividad?">
                     <input type="number" min="1" className={inp} value={draft.affectedEmployees} onChange={e => setDraft(p => ({ ...p, affectedEmployees: +e.target.value }))} />
                   </Fld>
@@ -1168,15 +1215,16 @@ export default function App() {
                       </div>
                     </Fld>
                   </div>
-                  <Fld label="Min. con IA (opcional)" help="Si ya mediste cuánto tarda esta actividad cuando se usa IA, ingrésalo aquí. El % de ahorro se calculará automáticamente desde datos reales, más preciso que la estimación. Déjalo vacío si aún no has medido.">
+                  <Fld label="Min. con IA por ejecución (opcional)" help="Si ya mediste cuánto tarda esta actividad cuando se usa IA — incluyendo revisar y corregir — ingrésalo aquí. El % de ahorro se calculará desde datos reales, más preciso que la estimación. Déjalo vacío si aún no has medido.">
                     <input type="number" min="0" placeholder="Ej: 9 (opcional)" className={inp} value={draft.minutesWithAI ?? ''} onChange={e => setDraft(p => ({ ...p, minutesWithAI: e.target.value === '' ? null : +e.target.value }))} />
                   </Fld>
                 </div>
                 {/* Preview calc */}
-                {draft.name && draft.minutesPerDay > 0 && draft.affectedEmployees > 0 && (
+                {draft.name && draft.minutesPerRun > 0 && draft.timesPerMonth > 0 && draft.affectedEmployees > 0 && (
                   <div className="bg-white border border-[#e5e5e5] rounded-lg p-3 mb-4 text-xs text-[#333] flex flex-wrap gap-4">
-                    <span>Costo/mes: <strong className="text-[#b00020]">{fmt((draft.minutesPerDay/60) * cfg.workDaysMonth * draft.affectedEmployees * cfg.hourlyCost, cfg.currency, 0)}</strong></span>
-                    <span>Ahorro estimado: <strong className="text-[#16a34a]">{fmt((draft.minutesPerDay/60) * cfg.workDaysMonth * draft.affectedEmployees * cfg.hourlyCost * draft.aiTimeReduction / 100, cfg.currency, 0)}/mes</strong></span>
+                    <span>Horas/mes por persona: <strong>{fmtN(draft.minutesPerRun * draft.timesPerMonth / 60)}h</strong></span>
+                    <span>Costo/mes: <strong className="text-[#b00020]">{fmt((draft.minutesPerRun * draft.timesPerMonth / 60) * draft.affectedEmployees * cfg.hourlyCost, cfg.currency, 0)}</strong></span>
+                    <span>Ahorro estimado: <strong className="text-[#16a34a]">{fmt((draft.minutesPerRun * draft.timesPerMonth / 60) * draft.affectedEmployees * cfg.hourlyCost * draft.aiTimeReduction / 100, cfg.currency, 0)}/mes</strong></span>
                   </div>
                 )}
                 <div className="flex gap-3">
@@ -1201,12 +1249,16 @@ export default function App() {
                         <th className="text-left px-4 py-3 font-semibold text-[#333] text-xs">Actividad</th>
                         <th className="text-left px-3 py-3 font-semibold text-[#333] text-xs hidden md:table-cell">Categoría</th>
                         <th className="text-center px-3 py-3 font-semibold text-[#333] text-xs">
-                          Min/día sin IA
-                          <HelpTip text="Minutos que cada persona afectada pierde en esta actividad por día laboral (sin usar IA). Al editar aquí directamente el valor siempre es diario; para cargar un dato semanal usa el selector de Frecuencia en 'Nueva actividad'." />
+                          Min sin IA
+                          <HelpTip text="Minutos que tarda la actividad cada vez que se hace, sin IA, de principio a fin." />
                         </th>
                         <th className="text-center px-3 py-3 font-semibold text-[#333] text-xs">
-                          Min/día con IA
-                          <HelpTip text="Tiempo real medido de esta actividad cuando ya se usa IA. Si lo ingresas, el % de ahorro se calcula desde datos reales (más preciso que la estimación manual). Deja vacío si aún no has medido." />
+                          Min con IA
+                          <HelpTip text="Tiempo real medido de la misma actividad cuando se usa IA, incluida la revisión. Si lo ingresas, el % de ahorro se calcula desde datos reales. Deja vacío si aún no has medido." />
+                        </th>
+                        <th className="text-center px-3 py-3 font-semibold text-[#333] text-xs">
+                          Veces/mes
+                          <HelpTip text={`Cuántas veces al mes ocurre la actividad. Diaria = ${cfg.workDaysMonth} (días laborales de Configuración), semanal = 4, mensual = 1. Horas/mes = minutos × veces ÷ 60.`} />
                         </th>
                         <th className="text-center px-3 py-3 font-semibold text-[#333] text-xs">
                           Personas
@@ -1214,7 +1266,7 @@ export default function App() {
                         </th>
                         <th className="text-right px-3 py-3 font-semibold text-[#333] text-xs">
                           Costo/mes
-                          <HelpTip text="Costo total mensual de esta actividad. Fórmula: (min/día ÷ 60) × días laborales/mes × personas × costo/hora." />
+                          <HelpTip text="Costo total mensual de esta actividad. Fórmula: (minutos × veces al mes ÷ 60) × personas × costo/hora." />
                         </th>
                         <th className="text-right px-3 py-3 font-semibold text-[#333] text-xs hidden sm:table-cell">
                           Costo/año
@@ -1243,8 +1295,8 @@ export default function App() {
                           <td className="px-3 py-3 text-[#757575] text-[11px] hidden md:table-cell">{m.category}</td>
                           <td className="px-3 py-3 text-center text-xs">
                             {editing === m.id
-                              ? <input type="number" min="1" className={inp + ' py-1 w-16 text-xs text-center'} value={m.minutesPerDay} onChange={e => updAct(m.id, 'minutesPerDay', +e.target.value)} />
-                              : m.minutesPerDay
+                              ? <input type="number" min="1" className={inp + ' py-1 w-16 text-xs text-center'} value={m.minutesPerRun} onChange={e => updAct(m.id, 'minutesPerRun', +e.target.value)} />
+                              : m.minutesPerRun
                             }
                           </td>
                           <td className="px-3 py-3 text-center text-xs">
@@ -1253,6 +1305,12 @@ export default function App() {
                               : m.minutesWithAI != null
                                 ? <span className="text-[11px] font-semibold text-green-700 bg-green-50 px-1.5 py-0.5 rounded-full">{m.minutesWithAI}min</span>
                                 : <span className="text-[#ccc]">—</span>
+                            }
+                          </td>
+                          <td className="px-3 py-3 text-center text-xs">
+                            {editing === m.id
+                              ? <input type="number" min="1" max="500" className={inp + ' py-1 w-16 text-xs text-center'} value={m.timesPerMonth} onChange={e => updAct(m.id, 'timesPerMonth', Math.max(1, +e.target.value || 1))} />
+                              : <span title={`${m.timesPerMonth} veces al mes`} className="text-[11px] text-[#333]">{freqLabel(m.timesPerMonth, cfg)}</span>
                             }
                           </td>
                           <td className="px-3 py-3 text-center text-xs">
@@ -1820,7 +1878,8 @@ export default function App() {
           ACTIVITY_LIBRARY.forEach(area => {
             area.activities.forEach((act, i) => {
               const key = `${area.area}::${i}`;
-              if (selectedLib[key]) toAdd.push({ ...act, id: uid(), minutesWithAI: null });
+              // La biblioteca está calibrada en min/día: entra como actividad diaria
+              if (selectedLib[key]) toAdd.push(migrateAct({ ...act, id: uid(), minutesWithAI: null }, cfg));
             });
           });
           if (toAdd.length === 0) return;
@@ -1885,7 +1944,7 @@ export default function App() {
                                 {alreadyAdded && <span className="text-[10px] text-[#757575] ml-1">(ya agregada)</span>}
                               </p>
                               <div className="flex flex-wrap gap-2 mt-1">
-                                <span className="text-[10px] text-[#757575]">{act.minutesPerDay} min/día · {act.affectedEmployees} pers.</span>
+                                <span className="text-[10px] text-[#757575]">{act.minutesPerDay} min · diaria · {act.affectedEmployees} pers.</span>
                                 <PotBadge v={act.automationPotential} />
                                 <span className="text-[10px] font-semibold text-[#16a34a]">-{act.aiTimeReduction}% con IA</span>
                               </div>
