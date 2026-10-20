@@ -299,17 +299,20 @@ function HelpTip({ text }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const btnRef = useRef(null);
+  const tipRef = useRef(null);
   // Posición fija calculada desde el botón: así ningún contenedor con overflow
   // lo recorta, y se abre hacia el lado (y la vertical) donde realmente cabe.
-  const place = () => {
+  const place = (h = 140) => {
     const r = btnRef.current?.getBoundingClientRect(); if (!r) return;
-    const W = 240, H = 140, m = 8, vw = window.innerWidth, vh = window.innerHeight;
+    const W = 240, H = h, m = 8, vw = window.innerWidth, vh = window.innerHeight;
     let left = r.right + m; if (left + W > vw - m) left = Math.max(m, r.left - W - m);
     if (left + W > vw - m) left = Math.max(m, vw - W - m);
     let top = r.top; if (top + H > vh - m) top = Math.max(m, vh - H - m);
     setPos({ left, top, width: W });
   };
   const show = () => { place(); setOpen(true); };
+  // Segundo pase con el alto real: los textos largos superan la estimación inicial
+  useEffect(() => { if (open && tipRef.current) place(tipRef.current.offsetHeight); }, [open]);
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
@@ -325,7 +328,7 @@ function HelpTip({ text }) {
         className="text-[#2A5B8C] font-bold text-[10px] border border-[#2A5B8C] rounded-full w-[15px] h-[15px] inline-flex items-center justify-center leading-none"
       >?</button>
       {open && pos && createPortal(
-        <div role="tooltip" style={{ position: 'fixed', ...pos }}
+        <div ref={tipRef} role="tooltip" style={{ position: 'fixed', ...pos }}
           className="z-[100] bg-white border border-[#e5e5e5] rounded-lg shadow-xl p-3 text-xs text-[#333] leading-relaxed whitespace-normal text-left font-normal normal-case tracking-normal">
           {text}
         </div>,
