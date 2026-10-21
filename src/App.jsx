@@ -1510,10 +1510,17 @@ export default function App() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-[#b00020] bg-[#fff5f6]">
-                        <td colSpan={5} className="px-4 py-3 font-bold text-[#222] text-xs">TOTAL ({acts.length} actividades)</td>
-                        <td className="px-3 py-3 text-right font-black text-[#b00020]">{fmt(tot.totalCostMon, cfg.currency)}</td>
+                        {/* Una celda por columna, con las mismas clases responsive que la cabecera:
+                            colSpan sobre columnas ocultas en móvil descuadra los totales. */}
+                        <td className="px-4 py-3 font-bold text-[#222] text-xs">TOTAL ({acts.length} actividades)</td>
+                        <td className="hidden md:table-cell" />
+                        <td /><td /><td />
+                        <td className="px-3 py-3 text-center text-xs font-semibold text-[#333]">{acts.reduce((s, a) => s + (+a.affectedEmployees || 0), 0)}</td>
+                        <td className="px-3 py-3 text-right font-black text-[#b00020] text-xs">{fmt(tot.totalCostMon, cfg.currency)}</td>
                         <td className="px-3 py-3 text-right text-[#b00020] font-semibold text-xs hidden sm:table-cell">{fmt(tot.totalCostYr, cfg.currency)}</td>
-                        <td colSpan={3} className="px-3 py-3 text-right text-xs text-[#16a34a] font-semibold">Ahorro est.: {fmt(tot.totalSavMon, cfg.currency)}/mes</td>
+                        <td />
+                        <td className="hidden lg:table-cell" />
+                        <td colSpan={2} className="px-3 py-3 text-center text-xs text-[#16a34a] font-semibold whitespace-nowrap">Ahorro: {fmt(tot.totalSavMon, cfg.currency)}/mes</td>
                       </tr>
                     </tfoot>
                   </table>
