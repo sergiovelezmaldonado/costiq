@@ -245,6 +245,52 @@ function ViewBadge({ source }) {
   return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: s.bg, color: s.fg }} title={b.label}>{b.short}</span>;
 }
 
+// ── Importación CSV ────────────────────────────────────────────────────────
+// Lector CSV con comillas (RFC 4180). Detecta el separador: Google Sheets y
+// Excel en español exportan con "," y decimales entre comillas ("2,4"), o con ";".
+function parseCSV(text) {
+  const src = text.replace(/^\uFEFF/, '');
+  const firstLine = src.split(/\r?\n/, 1)[0] || '';
+  const outside = firstLine.replace(/"[^"]*"/g, '');
+  const sep = (outside.match(/;/g) || []).length > (outside.match(/,/g) || []).length ? ';' : ',';
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (q) {
+      if (ch === '"') { if (src[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === sep) { row.push(cell.trim()); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && src[i + 1] === '\n') i++;
+      row.push(cell.trim()); rows.push(row); row = []; cell = '';
+    } else cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell.trim()); rows.push(row); }
+  return rows.filter(r => r.some(c => c !== ''));
+}
+// Número tolerante a formato regional: "2,4" → 2.4 · "1.234,5" → 1234.5 · "1,234.5" → 1234.5
+function parseNum(v) {
+  let s = String(v ?? '').trim().replace(/\s/g, ''); if (!s) return NaN;
+  const c = s.lastIndexOf(','), d = s.lastIndexOf('.');
+  if (c > -1 && d > -1) s = c > d ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if (c > -1) s = s.replace(',', '.');
+  return parseFloat(s.replace(/[^\d.-]/g, ''));
+}
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+// Hoja «Mi línea base» (Módulo 2): Actividad · ¿Usas IA? · Tiempo SIN IA · Tiempo CON IA · Diferencia · Veces al mes · Horas al mes
+function lineaBaseColumns(header) {
+  const h = header.map(norm);
+  const find = (...keys) => h.findIndex(x => keys.every(k => x.includes(k)));
+  const col = { name: find('actividad'), usesAI: find('usas ia'), without: find('sin ia'), with: find('con ia'), times: find('veces'), source: find('beneficio') };
+  return col.name > -1 && col.without > -1 && col.times > -1 ? col : null;
+}
+function benefitKeyFromLabel(label) {
+  const n = norm(label); if (!n) return 'unknown';
+  const hit = BENEFIT_SOURCES.find(b => norm(b.label) === n) || BENEFIT_SOURCES.find(b => n.includes(norm(b.label).split(' ').slice(0, 2).join(' ')));
+  return hit ? hit.key : 'unknown';
+}
+
 // Desglose del ahorro: cuánto es capacidad liberada y cuánto tiene vía de caja.
 // Es la lectura honesta del "ahorro": un comité que ve $5.000/mes y luego
 // descubre que el 90 % es tiempo de gente con salario fijo deja de creer en la cifra.
@@ -737,7 +783,7 @@ export default function App() {
     </td>
     <td style="vertical-align:middle;padding-left:10px;">
       <div style="font-size:16pt;font-weight:bold;color:#222222;">${esc(cfg.companyName)}${cfg.department ? ' · ' + esc(cfg.department) : ''}</div>
-      <div style="font-size:10pt;color:#757575;">Análisis de costos ocultos por ineficiencia operativa</div>
+      <div style="font-size:10pt;color:#757575;">Análisis del costo de las actividades y del tiempo que libera la IA</div>
     </td>
     <td style="vertical-align:middle;text-align:right;color:#757575;font-size:9pt;">
       CostIQ · <b style="color:#b00020;">FuturIA</b><br>${esc(dateStr)}
@@ -862,19 +908,52 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target.result || '';
+      // Ruta 1: hoja «Mi línea base» del Módulo 2 (CSV descargado de Google Sheets).
+      // Se reconoce por sus encabezados, que pueden no estar en la primera fila.
+      if (!isXLS) {
+        const all = parseCSV(text);
+        const hIdx = all.findIndex(r => lineaBaseColumns(r));
+        if (hIdx > -1) {
+          const col = lineaBaseColumns(all[hIdx]);
+          const lb = [];
+          for (const r of all.slice(hIdx + 1)) {
+            const name = (r[col.name] || '').trim();
+            const without = parseNum(r[col.without]);
+            if (!name || /^total/i.test(name) || !(without > 0)) continue;
+            const withRaw = col.with > -1 ? parseNum(r[col.with]) : NaN;
+            const usesAI = col.usesAI > -1 ? /^s/i.test(norm(r[col.usesAI])) : !isNaN(withRaw);
+            const withAI = usesAI && withRaw >= 0 && withRaw < without ? withRaw : null;
+            const times = parseNum(r[col.times]);
+            lb.push({
+              id: uid(), name, category: CATEGORIES[0],
+              minutesPerRun: without, timesPerMonth: times > 0 ? times : 1,
+              affectedEmployees: 1, automationPotential: withAI != null ? 'Alto' : 'Medio',
+              aiTimeReduction: 50, minutesWithAI: withAI,
+              benefitSource: col.source > -1 ? benefitKeyFromLabel(r[col.source]) : 'salary',
+            });
+          }
+          if (!lb.length) { alert('Se reconoció la hoja «Mi línea base», pero no tiene actividades con tiempo sin IA.'); return; }
+          const noAI = lb.filter(a => a.minutesWithAI == null).length;
+          const msg = `Hoja «Mi línea base»: ${lb.length} actividad${lb.length !== 1 ? 'es' : ''}`
+            + (noAI ? ` (${noAI} sin tiempo con IA: usarán el % estimado, ajústalo en la tabla)` : '')
+            + `.\nSe importan para 1 persona y como "salario fijo".${acts.length > 0 && !isSampleData ? ' Se agregarán a las existentes.' : ''} ¿Continuar?`;
+          if (window.confirm(msg)) { setActs(p => [...(isSampleData ? [] : p), ...lb]); setTab('activities'); }
+          return;
+        }
+      }
       let dataRows;
       if (isXLS) {
         dataRows = parseXLSRows(text);
       } else {
-        const lines = text.replace(/^﻿/, '').split('\n').map(l => l.trim()).filter(Boolean);
-        if (lines.length < 2) { alert('El archivo no tiene datos. Usa la plantilla de CostIQ.'); return; }
-        dataRows = lines.slice(1).map(line => line.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
+        const rows = parseCSV(text);
+        if (rows.length < 2) { alert('El archivo no tiene datos. Usa la plantilla de CostIQ o la hoja «Mi línea base».'); return; }
+        dataRows = rows.slice(1);
       }
-      if (!dataRows.length) { alert('No se encontraron actividades. Asegúrate de usar la plantilla de CostIQ.'); return; }
+      if (!dataRows.length) { alert('No se encontraron actividades. Usa la plantilla de CostIQ o la hoja «Mi línea base».'); return; }
       const parsed = [];
       for (const cols of dataRows) {
         if (!cols[0]) continue;
-        const min = Math.max(1, parseInt(cols[2]) || 30);
+        const min = Math.max(1, parseNum(cols[2]) || 30);
         const emp = Math.max(1, parseInt(cols[3]) || cfg.globalEmployees);
         const pot = ['Alto','Medio','Bajo'].includes(cols[4]) ? cols[4] : 'Medio';
         const red = Math.min(100, Math.max(0, parseInt(cols[5]) || 50));
@@ -882,7 +961,7 @@ export default function App() {
         const mAI = (mAIRaw != null && !isNaN(mAIRaw) && mAIRaw >= 0 && mAIRaw < min) ? mAIRaw : null;
         const cat = CATEGORIES.includes(cols[1]) ? cols[1] : CATEGORIES[0];
         // Columna 8 opcional: veces al mes. Plantillas antiguas (7 columnas) → diaria.
-        const tpmRaw = cols[7] !== undefined && cols[7] !== '' ? parseFloat(cols[7]) : NaN;
+        const tpmRaw = cols[7] !== undefined && cols[7] !== '' ? parseNum(cols[7]) : NaN;
         const tpm = !isNaN(tpmRaw) && tpmRaw > 0 ? tpmRaw : cfg.workDaysMonth;
         parsed.push({ id: uid(), name: cols[0], category: cat, minutesPerRun: min, timesPerMonth: tpm, affectedEmployees: emp, automationPotential: pot, aiTimeReduction: red, minutesWithAI: mAI });
       }
@@ -968,7 +1047,7 @@ export default function App() {
               <p className="text-3xl mb-2">💡</p>
               <h1 className="text-xl font-black text-[#222] mb-1">¿Cómo usar CostIQ?</h1>
               <p className="text-sm text-[#757575] max-w-xl mx-auto">
-                CostIQ te ayuda a descubrir cuánto dinero pierde tu empresa por ineficiencias operativas
+                CostIQ te ayuda a descubrir cuánto le cuestan a tu empresa sus actividades repetitivas
                 y cuánto podrías ahorrar adoptando inteligencia artificial. Sigue estos 6 pasos en orden.
               </p>
               <button onClick={() => setTab('config')} className={btnR + ' mt-4'}>
@@ -988,16 +1067,16 @@ export default function App() {
                 },
                 {
                   step: '2', icon: '📋', tab: 'activities', color: '#b00020', bg: '#fde8ec',
-                  title: 'Registra las actividades ineficientes',
-                  desc: 'Agrega cada tarea que consume tiempo sin generar valor. Puedes hacerlo una a una, usando la 📚 Biblioteca con 60 actividades de referencia por área, o importando directamente el archivo Excel de plantilla.',
+                  title: 'Registra las actividades de tu equipo',
+                  desc: 'Agrega cada tarea recurrente que consume tiempo del equipo. Puedes hacerlo una a una, usando la 📚 Biblioteca con 60 actividades de referencia por área, o importando directamente el archivo Excel de plantilla.',
                   tip: '💡 Descarga la Plantilla Excel (2 pestañas: formulario + 60 actividades de referencia), complétala y luego usa "Importar archivo" para cargarla.',
                   fields: ['Nueva actividad', 'Minutos por ejecución', 'Frecuencia (veces al mes)', '📚 Biblioteca (60)', '📥 Plantilla Excel', '📤 Importar .xls/.csv', 'Min. con IA (medido)'],
                 },
                 {
                   step: '3', icon: '📊', tab: 'dashboard', color: '#d97706', bg: '#fef9c3',
                   title: 'Revisa el Dashboard',
-                  desc: 'Aquí verás el costo total mensual y anual de las ineficiencias registradas, junto con la proyección de ahorro usando IA. Los gráficos muestran qué actividades generan más pérdidas.',
-                  tip: '💡 El "costo mensual total" es el dinero que estás perdiendo HOY. El "ahorro estimado" es lo que podrías recuperar.',
+                  desc: 'Aquí verás el costo total mensual y anual de las actividades registradas, junto con el tiempo que liberaría la IA. Los gráficos muestran qué actividades concentran más costo.',
+                  tip: '💡 El "costo mensual total" es lo que cuestan hoy esas actividades. El "ahorro estimado" es el valor del tiempo que liberaría la IA: revisa qué parte es capacidad y qué parte es caja.',
                   fields: ['Escala diaria/semanal/mensual', 'KPIs actuales', 'KPIs con IA', 'Gráfico por actividad', 'Distribución por categoría'],
                 },
                 {
@@ -1119,7 +1198,7 @@ export default function App() {
 
             {/* CTA */}
             <div className="text-center py-4">
-              <p className="text-sm text-[#757575] mb-3">¿Listo para descubrir cuánto le cuesta la ineficiencia a tu empresa?</p>
+              <p className="text-sm text-[#757575] mb-3">¿Listo para descubrir cuánto cuestan las actividades de tu equipo?</p>
               <div className="flex gap-3 justify-center flex-wrap">
                 <button onClick={() => { loadSample(); setTab('dashboard'); }} className={btnO}>Ver con datos de ejemplo</button>
                 <button onClick={() => setTab('config')} className={btnR}>Empezar con mis datos →</button>
@@ -1155,10 +1234,10 @@ export default function App() {
               </div>
             )}
 
-            {/* Escala del tiempo perdido — mismo dato, tres horizontes */}
+            {/* Escala del tiempo dedicado — mismo dato, cuatro horizontes */}
             <div className="mb-5">
               <p className="text-[10px] font-bold text-[#757575] uppercase tracking-widest mb-2">
-                Escala del tiempo perdido
+                Escala del tiempo dedicado
                 <HelpTip text="Las horas al mes de todas las actividades y personas, calculadas con la frecuencia real de cada una. Diario y semanal son prorrateos de ese total (días laborales de Configuración); anual es ×12." />
               </p>
               <div className="bg-[#fff5f6] border border-[#e5e5e5] rounded-2xl p-4 flex flex-wrap items-center justify-around gap-2 text-center">
@@ -1188,14 +1267,14 @@ export default function App() {
             <div className="mb-1">
               <p className="text-[10px] font-bold text-[#757575] uppercase tracking-widest mb-2">Estado actual · Sin IA</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                <KPI label="Costo mensual total"  value={fmt(tot.totalCostMon, cfg.currency)}  sub="en tiempo improductivo"             color={C.red}   icon="💸" highlight
+                <KPI label="Costo mensual total"  value={fmt(tot.totalCostMon, cfg.currency)}  sub="en las actividades registradas"             color={C.red}   icon="💸" highlight
                   help="Cuánto cuestan hoy, cada mes, las actividades registradas. Se calcula sumando: (minutos por ejecución × veces al mes ÷ 60) × personas afectadas × costo/hora, para cada actividad." />
                 <KPI label="Costo anual total"    value={fmt(tot.totalCostYr, cfg.currency)}   sub="proyección a 12 meses"              color={C.red}   icon="📅"
-                  help="Proyección del costo mensual multiplicado por 12. Es el impacto anual total de mantener las ineficiencias actuales sin ningún cambio." />
-                <KPI label="Horas perdidas/mes"   value={`${fmtN(tot.totalHMon)}h`}            sub="suma total todos los empleados"     color="#d97706" icon="⏰"
+                  help="Proyección del costo mensual multiplicado por 12. Es lo que costarían esas actividades en un año si se siguen haciendo igual." />
+                <KPI label="Horas dedicadas/mes"   value={`${fmtN(tot.totalHMon)}h`}            sub="suma total todos los empleados"     color="#d97706" icon="⏰"
                   help="Total de horas al mes sumando todos los empleados afectados en todas las actividades, con la frecuencia real de cada una. Un informe de 4 h que se hace una vez al mes aporta 4 h; una tarea diaria de 1 h, 22 h." />
                 <KPI label="Actividades"          value={acts.length}                           sub={tot.topCost ? `Más costosa: ${tot.topCost.name.slice(0,18)}…` : '—'} color={C.blue} icon="📋"
-                  help="Número de actividades ineficientes registradas. Cuantas más registres, más preciso será el análisis. Se muestra también cuál es la que genera mayor costo mensual." />
+                  help="Número de actividades registradas. Cuantas más registres, más preciso será el análisis. Se muestra también cuál es la que genera mayor costo mensual." />
               </div>
             </div>
 
@@ -1298,8 +1377,8 @@ export default function App() {
           <div>
             <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
               <div>
-                <h1 className="text-lg font-bold text-[#222]">Actividades e ineficiencias</h1>
-                <p className="text-sm text-[#757575]">Registra cada tarea que consume tiempo sin generar valor directo.</p>
+                <h1 className="text-lg font-bold text-[#222]">Actividades de tu equipo</h1>
+                <p className="text-sm text-[#757575]">Registra las tareas recurrentes: cuánto tardan, cada cuánto ocurren y cuánto tardarían con IA.</p>
               </div>
               <div className="flex gap-2 flex-wrap">
                 <button onClick={loadSample} className={btnO}>Cargar ejemplos</button>
@@ -1328,7 +1407,7 @@ export default function App() {
                 <h3 className="font-semibold text-[#222] mb-4 text-sm">Nueva actividad</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                   <div className="sm:col-span-2 lg:col-span-2">
-                    <Fld label="Descripción de la actividad" help="¿Qué tarea genera la ineficiencia? Sé específico. Ej: 'Reuniones de seguimiento sin agenda previa'.">
+                    <Fld label="Descripción de la actividad" help="Nombra la tarea concreta, no la categoría. Ej: 'Informe mensual de ventas para el comité'.">
                       <input className={inp} value={draft.name} placeholder="Ej: Reuniones sin agenda clara" onChange={e => setDraft(p => ({ ...p, name: e.target.value }))} />
                     </Fld>
                   </div>
@@ -1907,7 +1986,7 @@ export default function App() {
                 <div className="flex items-start justify-between flex-wrap gap-3">
                   <div>
                     <h2 className="text-xl font-black text-[#222]">{cfg.companyName}{cfg.department ? ` · ${cfg.department}` : ''}</h2>
-                    <p className="text-sm text-[#757575]">Análisis de costos ocultos por ineficiencia operativa</p>
+                    <p className="text-sm text-[#757575]">Análisis del costo de las actividades y del tiempo que libera la IA</p>
                     <p className="text-xs text-[#757575] mt-0.5">Generado: {new Date().toLocaleDateString('es-MX', { day:'numeric', month:'long', year:'numeric' })}</p>
                   </div>
                   <div className="text-right">
@@ -2168,7 +2247,7 @@ export default function App() {
               </div>
             </div>
             <div className="space-y-3 text-sm text-[#333] mb-5">
-              <p>CostIQ te ayuda a <strong>cuantificar el costo real de la ineficiencia operativa</strong> en tu empresa y a proyectar el retorno de inversión al adoptar herramientas de inteligencia artificial.</p>
+              <p>CostIQ te ayuda a <strong>cuantificar el costo real de las actividades repetitivas</strong> en tu empresa y a proyectar el retorno de inversión al adoptar herramientas de inteligencia artificial.</p>
               <p>Desarrollada por <a href="https://futuria.substack.com" target="_blank" rel="noopener noreferrer" className="text-[#b00020] hover:underline font-medium">FuturIA</a> — IA aplicada. En español. Para líderes que actúan.</p>
               <div className="grid grid-cols-3 gap-3 py-3">
                 {[['+70K','Profesionales'],['+80','Países'],['100%','Local']].map(([v, l]) => (
