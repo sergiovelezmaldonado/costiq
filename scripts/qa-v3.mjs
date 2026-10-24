@@ -32,7 +32,7 @@ if (!rows.every(r => r.some(c => /Diaria/.test(c)))) fail('las filas v2 no se mu
 console.log(`(1) migración OK · ${rows.length} filas v2 leídas como Diaria · costo total ${totalShown} = ${expectV2}`);
 
 // (2) alta de actividad mensual
-await p.getByRole('button', { name: /Nueva actividad/ }).first().click();
+await p.getByRole('button', { name: /Escribir una actividad/ }).first().click();
 await p.getByPlaceholder(/Reuniones sin agenda/).fill('Informe mensual del comité');
 await p.locator('label:has-text("Minutos por ejecución") + input, label:has-text("Minutos por ejecución") ~ input').first().fill('240');
 await p.locator('select').filter({ has: p.locator('option:has-text("Mensual")') }).first().selectOption('monthly');

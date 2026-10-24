@@ -1,0 +1,702 @@
+[
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.1",
+  "name": "Resumir un informe largo antes de una reunión",
+  "produce": "Un resumen de una página con lo que hay que saber para opinar.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.2",
+  "name": "Redactar el correo de seguimiento de los acuerdos",
+  "produce": "Un correo con quién hace qué y para cuándo.",
+  "freq": "Después de cada reunión."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.3",
+  "name": "Preparar la agenda de la reunión semanal",
+  "produce": "La agenda con tiempos y el punto que decide cada bloque.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.4",
+  "name": "Convertir notas sueltas en un memo presentable",
+  "produce": "Un memo de una o dos páginas listo para circular.",
+  "freq": "Varias veces por semana."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.5",
+  "name": "Redactar el comunicado interno de un cambio",
+  "produce": "El texto del anuncio, en el tono de la empresa.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.6",
+  "name": "Preparar preguntas para una reunión con un área",
+  "produce": "Una lista de preguntas que obligan a precisar.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.7",
+  "name": "Resumir la semana para el reporte a casa matriz",
+  "produce": "El reporte semanal en el formato que piden.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.8",
+  "name": "Revisar un documento antes de firmarlo",
+  "produce": "Una lista de lo que conviene mirar dos veces.",
+  "freq": "Varias veces por semana."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.9",
+  "name": "Redactar la respuesta a una solicitud interna",
+  "produce": "El correo de respuesta, con el criterio aplicado.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Dirección y gerencia",
+  "n": "1.10",
+  "name": "Preparar el guion de una presentación",
+  "produce": "El guion lámina por lámina, con lo que dices en cada una.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.1",
+  "name": "Redactar el correo de seguimiento a un prospecto",
+  "produce": "El correo, con el siguiente paso propuesto.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.2",
+  "name": "Preparar la propuesta comercial estándar",
+  "produce": "La propuesta completa, lista para revisar.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.3",
+  "name": "Resumir la llamada con el cliente en notas de CRM",
+  "produce": "Las notas estructuradas para pegar en el CRM.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.4",
+  "name": "Redactar respuestas a objeciones frecuentes",
+  "produce": "Un documento con la respuesta estándar a cada objeción.",
+  "freq": "Trimestral."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.5",
+  "name": "Preparar el reporte semanal de pipeline",
+  "produce": "El reporte con el avance y lo que está trabado.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.6",
+  "name": "Investigar una empresa antes de la primera reunión",
+  "produce": "Una ficha con lo relevante del prospecto.",
+  "freq": "Varias veces por semana."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.7",
+  "name": "Redactar la cotización con las condiciones estándar",
+  "produce": "La cotización lista para enviar.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.8",
+  "name": "Preparar el guion de la llamada de descubrimiento",
+  "produce": "Las preguntas en el orden que las vas a hacer.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.9",
+  "name": "Convertir el pliego del cliente en una lista de requisitos",
+  "produce": "Una lista de requisitos con lo que cumples y lo que no.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Comercial y ventas",
+  "n": "2.10",
+  "name": "Redactar el correo de reactivación de cuentas dormidas",
+  "produce": "Un correo distinto para cada cuenta, no un envío masivo.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.1",
+  "name": "Adaptar una pieza a los distintos canales",
+  "produce": "La misma pieza en los formatos de cada canal.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.2",
+  "name": "Redactar el boletín mensual",
+  "produce": "El boletín completo, listo para maquetar.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.3",
+  "name": "Generar variantes de titular para probar",
+  "produce": "Cinco o diez variantes del mismo titular.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.4",
+  "name": "Resumir los comentarios de una campaña",
+  "produce": "Un resumen de lo que dice la gente, agrupado por tema.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.5",
+  "name": "Redactar la descripción de producto para el catálogo",
+  "produce": "La ficha de producto con su descripción.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.6",
+  "name": "Preparar el calendario de contenidos del mes",
+  "produce": "El calendario con tema, formato y canal por fecha.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.7",
+  "name": "Despiezar un webinar en piezas cortas",
+  "produce": "Varias piezas de contenido salidas de una sola grabación.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.8",
+  "name": "Redactar el brief para un proveedor o diseñador",
+  "produce": "El brief con objetivo, formato, tono y entregables.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.9",
+  "name": "Preparar el reporte de resultados de campaña",
+  "produce": "El reporte con las cifras y la lectura.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Marketing y contenido",
+  "n": "3.10",
+  "name": "Traducir y adaptar material a otro mercado",
+  "produce": "El material traducido y adaptado, no solo traducido.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.1",
+  "name": "Redactar la respuesta a un reclamo estándar",
+  "produce": "La respuesta al cliente, con la solución concreta.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.2",
+  "name": "Clasificar y etiquetar los tickets del día",
+  "produce": "Los tickets agrupados por motivo y urgencia.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.3",
+  "name": "Resumir el historial de un cliente antes de llamarlo",
+  "produce": "Una ficha con lo que pasó antes, en orden.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.4",
+  "name": "Redactar las respuestas tipo del canal de chat",
+  "produce": "Un banco de respuestas para las consultas frecuentes.",
+  "freq": "Trimestral."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.5",
+  "name": "Preparar el reporte semanal de reclamos",
+  "produce": "El reporte con volumen, motivos y casos abiertos.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.6",
+  "name": "Convertir un caso resuelto en artículo de ayuda",
+  "produce": "Un artículo para la base de conocimiento.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.7",
+  "name": "Redactar la disculpa y el plan de solución",
+  "produce": "Un correo que reconoce el problema y dice qué sigue.",
+  "freq": "Varias veces por semana."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.8",
+  "name": "Preparar el guion de la llamada de seguimiento",
+  "produce": "Lo que vas a decir y en qué orden.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.9",
+  "name": "Detectar los reclamos repetidos de la semana",
+  "produce": "La lista de problemas que vuelven a aparecer.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Servicio al cliente",
+  "n": "4.10",
+  "name": "Traducir la respuesta al idioma del cliente",
+  "produce": "La misma respuesta en el idioma que corresponde.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.1",
+  "name": "Preparar el comentario del reporte mensual",
+  "produce": "El texto que acompaña a las cifras.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.2",
+  "name": "Conciliar y explicar diferencias en una planilla",
+  "produce": "La lista de diferencias con su posible origen.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.3",
+  "name": "Redactar el correo de cobranza según la antigüedad",
+  "produce": "El correo con el tono que corresponde a cada tramo.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.4",
+  "name": "Convertir el presupuesto en un resumen para el área",
+  "produce": "Una página con lo que cada área necesita saber.",
+  "freq": "Anual y en cada revisión."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.5",
+  "name": "Preparar el archivo de gastos para revisión",
+  "produce": "Los gastos ordenados y con las inconsistencias marcadas.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.6",
+  "name": "Resumir los contratos de arrendamiento o servicios",
+  "produce": "Una tabla con montos, plazos y renovaciones.",
+  "freq": "Trimestral."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.7",
+  "name": "Preparar la respuesta a preguntas del auditor",
+  "produce": "La respuesta con el soporte documental señalado.",
+  "freq": "Anual."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.8",
+  "name": "Armar el flujo de caja semanal",
+  "produce": "El flujo con entradas, salidas y saldo proyectado.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.9",
+  "name": "Revisar facturas contra la orden de compra",
+  "produce": "Las diferencias entre lo pedido y lo facturado.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Finanzas y control de gestión",
+  "n": "5.10",
+  "name": "Preparar la presentación de cifras del mes",
+  "produce": "Las láminas con las cifras y su lectura.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.1",
+  "name": "Redactar la descripción de un puesto",
+  "produce": "La descripción con funciones, requisitos y encaje.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.2",
+  "name": "Preparar las preguntas de una entrevista",
+  "produce": "Las preguntas por competencia, con qué buscar en la respuesta.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.3",
+  "name": "Resumir las hojas de vida recibidas",
+  "produce": "Una tabla comparativa de los candidatos.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.4",
+  "name": "Redactar la comunicación de una política nueva",
+  "produce": "El comunicado que explica qué cambia para cada quien.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.5",
+  "name": "Preparar el plan de inducción de alguien que entra",
+  "produce": "El plan de las primeras dos semanas.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.6",
+  "name": "Resumir los resultados de una encuesta interna",
+  "produce": "El resumen por tema, con los comentarios agrupados.",
+  "freq": "Anual."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.7",
+  "name": "Redactar la carta de oferta y sus anexos",
+  "produce": "La carta completa, lista para revisión legal.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.8",
+  "name": "Preparar el material de una capacitación interna",
+  "produce": "Las láminas y los ejercicios de la sesión.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.9",
+  "name": "Resumir las evaluaciones de desempeño de un equipo",
+  "produce": "Una vista del equipo con fortalezas y brechas.",
+  "freq": "Semestral."
+ },
+ {
+  "area": "Talento humano",
+  "n": "6.10",
+  "name": "Redactar respuestas a consultas frecuentes del personal",
+  "produce": "Un banco de respuestas sobre vacaciones, permisos y beneficios.",
+  "freq": "Trimestral."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.1",
+  "name": "Resumir un contrato en sus puntos clave",
+  "produce": "Una ficha con obligaciones, plazos, montos y salidas.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.2",
+  "name": "Comparar dos versiones de un contrato",
+  "produce": "La lista de lo que cambió entre una versión y otra.",
+  "freq": "Varias veces por semana."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.3",
+  "name": "Redactar una cláusula estándar",
+  "produce": "El texto de la cláusula, en tu redacción habitual.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.4",
+  "name": "Preparar el expediente de un caso",
+  "produce": "Los documentos ordenados con una cronología.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.5",
+  "name": "Resumir una norma nueva y su efecto",
+  "produce": "Un resumen de qué cambia y a qué áreas afecta.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.6",
+  "name": "Redactar la respuesta a un requerimiento simple",
+  "produce": "El borrador de respuesta con los antecedentes.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.7",
+  "name": "Revisar un documento contra la lista de cláusulas",
+  "produce": "Las cláusulas faltantes o distintas a tu estándar.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.8",
+  "name": "Preparar el reporte de contratos vencidos",
+  "produce": "La lista de vencimientos y renovaciones próximas.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.9",
+  "name": "Traducir un contrato o documento legal",
+  "produce": "La traducción, para entender, no para firmar.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Legal y cumplimiento",
+  "n": "7.10",
+  "name": "Redactar el acta de una reunión con implicancias legales",
+  "produce": "El acta con los acuerdos y sus condiciones.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.1",
+  "name": "Preparar el reporte diario de entregas",
+  "produce": "El reporte con entregado, pendiente y con problema.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.2",
+  "name": "Redactar el procedimiento de una tarea",
+  "produce": "El procedimiento escrito, paso a paso.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.3",
+  "name": "Resumir las incidencias del turno",
+  "produce": "El resumen de lo que pasó y lo que quedó abierto.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.4",
+  "name": "Convertir el inventario en un reporte de faltantes",
+  "produce": "La lista de lo que falta y lo que está por agotarse.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.5",
+  "name": "Preparar la programación semanal de despachos",
+  "produce": "La programación con rutas y prioridades.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.6",
+  "name": "Redactar las instrucciones para el equipo de planta",
+  "produce": "Las instrucciones del día, claras y cortas.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.7",
+  "name": "Resumir las órdenes pendientes por cliente",
+  "produce": "La vista de qué debe cada cliente y desde cuándo.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.8",
+  "name": "Preparar la lista de verificación de una auditoría",
+  "produce": "La lista de control con lo que hay que revisar.",
+  "freq": "Trimestral."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.9",
+  "name": "Redactar el reporte de un incidente operativo",
+  "produce": "El reporte con qué pasó, por qué y qué se hizo.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Operaciones y logística",
+  "n": "8.10",
+  "name": "Consolidar los reportes de las sucursales",
+  "produce": "Un reporte único a partir de los de cada sucursal.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.1",
+  "name": "Redactar la solicitud de cotización",
+  "produce": "La solicitud con especificación, plazo y condiciones.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.2",
+  "name": "Comparar cotizaciones en un cuadro",
+  "produce": "El cuadro comparativo con precio, plazo y condiciones.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.3",
+  "name": "Resumir el contrato del proveedor",
+  "produce": "Una ficha con obligaciones, penalidades y vencimiento.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.4",
+  "name": "Redactar el correo de seguimiento de una orden",
+  "produce": "El correo pidiendo estado o reclamando el plazo.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.5",
+  "name": "Preparar el reporte de compras del mes",
+  "produce": "El reporte con gasto por categoría y proveedor.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.6",
+  "name": "Convertir la requisición en especificación técnica",
+  "produce": "La especificación que el proveedor puede cotizar.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.7",
+  "name": "Redactar la carta de reclamo a un proveedor",
+  "produce": "La carta con el incumplimiento y lo que exiges.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.8",
+  "name": "Preparar la lista de documentos por pedir",
+  "produce": "Qué documentos faltan de cada proveedor.",
+  "freq": "Trimestral."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.9",
+  "name": "Resumir el desempeño de entregas del trimestre",
+  "produce": "El reporte de cumplimiento por proveedor.",
+  "freq": "Trimestral."
+ },
+ {
+  "area": "Compras y proveedores",
+  "n": "9.10",
+  "name": "Redactar las condiciones estándar de compra",
+  "produce": "El texto de condiciones que acompaña cada orden.",
+  "freq": "Anual."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.1",
+  "name": "Redactar la respuesta a un ticket de soporte",
+  "produce": "La respuesta con la solución, en lenguaje de usuario.",
+  "freq": "Diaria."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.2",
+  "name": "Convertir un requerimiento en especificación",
+  "produce": "La especificación que el equipo puede estimar.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.3",
+  "name": "Resumir el log de un incidente",
+  "produce": "La cronología del incidente con los eventos clave.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.4",
+  "name": "Redactar el instructivo para el usuario final",
+  "produce": "El instructivo paso a paso, sin jerga.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.5",
+  "name": "Preparar el reporte de disponibilidad del mes",
+  "produce": "El reporte con disponibilidad, incidentes y tiempos.",
+  "freq": "Mensual."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.6",
+  "name": "Documentar un proceso o configuración",
+  "produce": "La documentación con los pasos y las decisiones.",
+  "freq": "Semanal."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.7",
+  "name": "Redactar el comunicado de una caída o mantenimiento",
+  "produce": "El aviso a los usuarios, con el impacto y el plazo.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.8",
+  "name": "Preparar el inventario de licencias y accesos",
+  "produce": "La lista de quién tiene qué y desde cuándo.",
+  "freq": "Trimestral."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.9",
+  "name": "Resumir la propuesta técnica de un proveedor",
+  "produce": "Una ficha con lo que ofrece, lo que no y qué depende de ti.",
+  "freq": "Varias veces al mes."
+ },
+ {
+  "area": "Tecnología y sistemas",
+  "n": "10.10",
+  "name": "Redactar las preguntas para evaluar una herramienta",
+  "produce": "La lista de preguntas para el proveedor.",
+  "freq": "Varias veces al mes."
+ }
+]

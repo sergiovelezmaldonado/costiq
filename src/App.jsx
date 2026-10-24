@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { CATALOG } from './catalog.js';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -54,86 +55,6 @@ const SAMPLE_ACTIVITIES = [
 
 const SAMPLE_IDS = new Set(SAMPLE_ACTIVITIES.map(s => s.id));
 
-const ACTIVITY_LIBRARY = [
-  { area:'Operaciones', color:'#2A5B8C', bg:'#dbeafe', activities:[
-    { name:'Reuniones de seguimiento sin agenda clara',              category:'Reuniones innecesarias',         minutesPerDay:45, affectedEmployees:8, automationPotential:'Medio', aiTimeReduction:40 },
-    { name:'Aprobación manual de solicitudes internas',              category:'Revisiones y aprobaciones',      minutesPerDay:30, affectedEmployees:6, automationPotential:'Alto',  aiTimeReduction:65 },
-    { name:'Coordinación de entregas por correo o WhatsApp',         category:'Coordinación y seguimiento',    minutesPerDay:25, affectedEmployees:5, automationPotential:'Medio', aiTimeReduction:50 },
-    { name:'Registro manual de inventario',                          category:'Entrada de datos manual',       minutesPerDay:40, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Elaboración de informes de estado semanales',            category:'Reportes y documentación',      minutesPerDay:35, affectedEmployees:4, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Seguimiento de tareas por correo en lugar de sistema',   category:'Coordinación y seguimiento',    minutesPerDay:20, affectedEmployees:8, automationPotential:'Medio', aiTimeReduction:55 },
-    { name:'Actualización manual de hojas de cálculo compartidas',   category:'Entrada de datos manual',       minutesPerDay:30, affectedEmployees:5, automationPotential:'Alto',  aiTimeReduction:75 },
-    { name:'Verificación manual de cumplimiento de procesos',        category:'Revisiones y aprobaciones',     minutesPerDay:25, affectedEmployees:4, automationPotential:'Medio', aiTimeReduction:45 },
-  ]},
-  { area:'Recursos Humanos', color:'#7c3aed', bg:'#ede9fe', activities:[
-    { name:'Revisión manual de CVs y postulaciones',                 category:'Procesos manuales repetitivos', minutesPerDay:60, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:75 },
-    { name:'Coordinación de entrevistas por correo',                 category:'Comunicación interna',          minutesPerDay:20, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:60 },
-    { name:'Onboarding sin materiales digitales estandarizados',     category:'Procesos manuales repetitivos', minutesPerDay:45, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:65 },
-    { name:'Gestión de solicitudes de vacaciones por correo',        category:'Comunicación interna',          minutesPerDay:15, affectedEmployees:4, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Elaboración de contratos desde cero',                    category:'Reportes y documentación',      minutesPerDay:50, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Seguimiento manual de evaluaciones de desempeño',        category:'Coordinación y seguimiento',    minutesPerDay:30, affectedEmployees:3, automationPotential:'Medio', aiTimeReduction:50 },
-    { name:'Recopilación de firmas en documentos físicos',           category:'Procesos manuales repetitivos', minutesPerDay:25, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:85 },
-    { name:'Actualización de nómina en hojas de cálculo',            category:'Entrada de datos manual',       minutesPerDay:35, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:75 },
-  ]},
-  { area:'Marketing y Comunicaciones', color:'#be185d', bg:'#fce7f3', activities:[
-    { name:'Redacción manual de publicaciones para redes sociales',  category:'Reportes y documentación',      minutesPerDay:45, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:65 },
-    { name:'Reportes de métricas copiados manualmente',              category:'Reportes y documentación',      minutesPerDay:40, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Respuesta manual a comentarios en redes sociales',       category:'Comunicación interna',          minutesPerDay:30, affectedEmployees:2, automationPotential:'Medio', aiTimeReduction:50 },
-    { name:'Creación de materiales gráficos sin plantillas base',    category:'Procesos manuales repetitivos', minutesPerDay:60, affectedEmployees:2, automationPotential:'Medio', aiTimeReduction:45 },
-    { name:'Segmentación manual de listas de contactos',             category:'Entrada de datos manual',       minutesPerDay:35, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:85 },
-    { name:'Elaboración de informes de campañas en PowerPoint',      category:'Reportes y documentación',      minutesPerDay:50, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Transcripción manual de grabaciones o entrevistas',      category:'Procesos manuales repetitivos', minutesPerDay:60, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:90 },
-  ]},
-  { area:'Finanzas y Contabilidad', color:'#065f46', bg:'#d1fae5', activities:[
-    { name:'Conciliación bancaria en hojas de cálculo',              category:'Entrada de datos manual',       minutesPerDay:60, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Elaboración de facturas una por una',                    category:'Procesos manuales repetitivos', minutesPerDay:40, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:85 },
-    { name:'Seguimiento de cuentas por cobrar por correo',           category:'Coordinación y seguimiento',    minutesPerDay:30, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Cálculo manual de comisiones de ventas',                 category:'Entrada de datos manual',       minutesPerDay:45, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Preparación de reportes financieros mensuales',          category:'Reportes y documentación',      minutesPerDay:90, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Digitalización manual de comprobantes físicos',          category:'Entrada de datos manual',       minutesPerDay:30, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:85 },
-    { name:'Consolidación de datos de múltiples hojas de cálculo',   category:'Entrada de datos manual',       minutesPerDay:50, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Revisión manual de gastos y reembolsos',                 category:'Revisiones y aprobaciones',     minutesPerDay:25, affectedEmployees:3, automationPotential:'Medio', aiTimeReduction:55 },
-  ]},
-  { area:'Ventas y CRM', color:'#b45309', bg:'#fef3c7', activities:[
-    { name:'Actualización manual del CRM después de llamadas',       category:'Entrada de datos manual',       minutesPerDay:30, affectedEmployees:8, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Elaboración de cotizaciones en Word o Excel',            category:'Reportes y documentación',      minutesPerDay:45, affectedEmployees:5, automationPotential:'Alto',  aiTimeReduction:75 },
-    { name:'Seguimiento de leads por correo o WhatsApp',             category:'Coordinación y seguimiento',    minutesPerDay:25, affectedEmployees:6, automationPotential:'Alto',  aiTimeReduction:65 },
-    { name:'Preparación manual de presentaciones de ventas',         category:'Reportes y documentación',      minutesPerDay:60, affectedEmployees:4, automationPotential:'Medio', aiTimeReduction:50 },
-    { name:'Registro de llamadas y visitas en planillas',            category:'Entrada de datos manual',       minutesPerDay:20, affectedEmployees:8, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Elaboración de reportes de pipeline manualmente',        category:'Reportes y documentación',      minutesPerDay:40, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:75 },
-    { name:'Envío manual de propuestas comerciales a prospectos',    category:'Comunicación interna',          minutesPerDay:20, affectedEmployees:5, automationPotential:'Alto',  aiTimeReduction:60 },
-  ]},
-  { area:'Tecnología / TI', color:'#1e40af', bg:'#dbeafe', activities:[
-    { name:'Documentación técnica sin plantillas estandarizadas',    category:'Reportes y documentación',      minutesPerDay:45, affectedEmployees:4, automationPotential:'Alto',  aiTimeReduction:65 },
-    { name:'Seguimiento de tickets de soporte por correo',           category:'Coordinación y seguimiento',    minutesPerDay:30, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Actualización manual de registros en múltiples sistemas',category:'Entrada de datos manual',       minutesPerDay:40, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:85 },
-    { name:'Generación manual de reportes de bugs o incidentes',     category:'Reportes y documentación',      minutesPerDay:30, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:75 },
-    { name:'Revisión manual de logs de error del sistema',           category:'Búsqueda de información',       minutesPerDay:25, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Comunicación de cambios sin gestión formal de releases',  category:'Comunicación interna',          minutesPerDay:20, affectedEmployees:4, automationPotential:'Medio', aiTimeReduction:50 },
-  ]},
-  { area:'Atención al Cliente', color:'#0891b2', bg:'#cffafe', activities:[
-    { name:'Respuesta manual a preguntas frecuentes por correo',     category:'Comunicación interna',          minutesPerDay:60, affectedEmployees:5, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Escalamiento de casos sin sistema de tickets',           category:'Coordinación y seguimiento',    minutesPerDay:20, affectedEmployees:5, automationPotential:'Medio', aiTimeReduction:55 },
-    { name:'Elaboración manual de reportes de satisfacción',         category:'Reportes y documentación',      minutesPerDay:35, affectedEmployees:2, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Seguimiento de quejas en hojas de cálculo',              category:'Entrada de datos manual',       minutesPerDay:25, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:75 },
-    { name:'Redacción de respuestas personalizadas desde cero',      category:'Comunicación interna',          minutesPerDay:45, affectedEmployees:4, automationPotential:'Alto',  aiTimeReduction:65 },
-    { name:'Transferencia de información entre turnos sin registro',  category:'Reportes y documentación',      minutesPerDay:20, affectedEmployees:6, automationPotential:'Medio', aiTimeReduction:50 },
-  ]},
-  { area:'Dirección y Gerencia', color:'#9f1239', bg:'#ffe4e6', activities:[
-    { name:'Preparación manual de presentaciones ejecutivas',        category:'Reportes y documentación',      minutesPerDay:60, affectedEmployees:3, automationPotential:'Medio', aiTimeReduction:55 },
-    { name:'Consolidación de reportes de diferentes áreas',          category:'Búsqueda de información',       minutesPerDay:45, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Agendamiento manual de reuniones ejecutivas',            category:'Coordinación y seguimiento',    minutesPerDay:20, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:75 },
-    { name:'Elaboración de actas de reunión sin estructura',         category:'Reportes y documentación',      minutesPerDay:30, affectedEmployees:4, automationPotential:'Alto',  aiTimeReduction:80 },
-    { name:'Seguimiento de compromisos por correo o notas físicas',  category:'Coordinación y seguimiento',    minutesPerDay:25, affectedEmployees:5, automationPotential:'Medio', aiTimeReduction:60 },
-  ]},
-  { area:'Logística y Compras', color:'#92400e', bg:'#fef9c3', activities:[
-    { name:'Cotización con múltiples proveedores por correo',        category:'Comunicación interna',          minutesPerDay:45, affectedEmployees:3, automationPotential:'Medio', aiTimeReduction:50 },
-    { name:'Seguimiento de órdenes de compra en hojas de cálculo',   category:'Coordinación y seguimiento',    minutesPerDay:30, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:70 },
-    { name:'Elaboración manual de órdenes de compra',                category:'Entrada de datos manual',       minutesPerDay:25, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:75 },
-    { name:'Control de inventario en planillas físicas',             category:'Entrada de datos manual',       minutesPerDay:40, affectedEmployees:3, automationPotential:'Alto',  aiTimeReduction:85 },
-    { name:'Coordinación de entregas y embarques por WhatsApp',      category:'Coordinación y seguimiento',    minutesPerDay:20, affectedEmployees:4, automationPotential:'Medio', aiTimeReduction:45 },
-  ]},
-];
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).substr(2, 9);
@@ -208,16 +129,21 @@ const freqKeyFor = (times, cfg) => {
   return 'custom';
 };
 const freqLabel = (times, cfg) => {
+  const near = v => Math.abs(times - v) < 1e-6;
+  if (near(1/3)) return 'Trimestral';
+  if (near(1/6)) return 'Semestral';
+  if (near(1/12)) return 'Anual';
   const k = freqKeyFor(times, cfg);
-  return k === 'custom' ? `${times}×/mes` : FREQ_PRESETS.find(p => p.key === k).label.replace(' (cada día laboral)', '');
+  return k === 'custom' ? `${+times.toFixed(2)}×/mes` : FREQ_PRESETS.find(p => p.key === k).label.replace(' (cada día laboral)', '');
 };
 function migrateAct(a, cfg) {
   const legacyMin = a.minutesPerDay;
   const minutesPerRun = Math.max(1, +(a.minutesPerRun ?? legacyMin ?? 30));
-  const timesPerMonth = Math.max(1, +(a.timesPerMonth ?? cfg.workDaysMonth));
+  // Mínimo 1/12 (anual): las actividades trimestrales y anuales del catálogo valen <1 vez al mes
+  const timesPerMonth = Math.max(1/12, +(a.timesPerMonth ?? cfg.workDaysMonth) || 1);
   const { minutesPerDay, ...rest } = a;
   const benefitSource = BENEFIT_SOURCES.some(b => b.key === a.benefitSource) ? a.benefitSource : 'unknown';
-  return { ...rest, minutesPerRun, timesPerMonth, benefitSource };
+  return { ...rest, minutesPerRun, timesPerMonth, benefitSource, refTimes: !!a.refTimes };
 }
 
 // ── Origen del beneficio (v3.1) ───────────────────────────────────────────
@@ -619,8 +545,22 @@ export default function App() {
     setAddOpen(false);
   };
 
+  // Editar minutos o frecuencia de una actividad del catálogo la confirma: deja de ser referencia.
+  const CONFIRMS = new Set(['minutesPerRun', 'minutesWithAI', 'timesPerMonth']);
   const updAct = (id, field, val) =>
-    setActs(p => p.map(a => a.id === id ? { ...a, [field]: val } : a));
+    setActs(p => p.map(a => a.id === id ? { ...a, [field]: val, ...(CONFIRMS.has(field) ? { refTimes: false } : {}) } : a));
+
+  // Carga desde el catálogo: frecuencia real, tiempos de referencia marcados «por confirmar».
+  const addFromCatalog = (items) => {
+    const toAdd = items.map(it => ({
+      id: uid(), name: it.name, category: CATEGORIES.includes(it.category) ? it.category : 'Otra',
+      minutesPerRun: it.minutes, timesPerMonth: it.times === 'daily' ? cfg.workDaysMonth : it.times,
+      affectedEmployees: 1, automationPotential: it.reduction >= 60 ? 'Alto' : 'Medio',
+      aiTimeReduction: it.reduction, minutesWithAI: null, benefitSource: 'salary', refTimes: true,
+    }));
+    setActs(p => [...(isSampleData ? [] : p), ...toAdd]);
+    return toAdd.length;
+  };
 
   const delAct = id => {
     const act = acts.find(a => a.id === id);
@@ -865,15 +805,16 @@ export default function App() {
       ].join(''))),
     ].join('\n   ');
 
-    // Sheet 2: 60 reference activities from library
-    const s2cols = ['Área','Actividad','Categoría','Min por ejecución','Empleados','Potencial IA','% Reducción estimada','Veces al mes'];
+    // Hoja 2: las 150 actividades del catálogo, con su frecuencia real
+    const s2cols = ['Área','Actividad','Categoría','Min por ejecución (referencia)','Frecuencia','Veces al mes','% Reducción estimada','Qué produce'];
     const s2rows = [
       hdrRow(s2cols),
-      ...ACTIVITY_LIBRARY.flatMap(area =>
-        area.activities.map(act => nr([
-          nc(area.area), nc(act.name), nc(act.category),
-          nc(act.minutesPerDay,'Number'), nc(act.affectedEmployees,'Number'),
-          nc(act.automationPotential), nc(act.aiTimeReduction,'Number'), nc(cfg.workDaysMonth,'Number'),
+      ...CATALOG.flatMap(area =>
+        area.items.map(it => nr([
+          nc(area.area), nc(it.name), nc(it.category), nc(it.minutes,'Number'),
+          nc(it.times === 'daily' ? 'Diaria' : it.freq),
+          nc(+(it.times === 'daily' ? cfg.workDaysMonth : it.times).toFixed(2),'Number'),
+          nc(it.reduction,'Number'), nc(it.produce),
         ].join('')))
       ),
     ].join('\n   ');
@@ -987,6 +928,7 @@ export default function App() {
   ];
 
   const hasData = acts.length > 0;
+  const refCount = acts.filter(a => a.refTimes).length;
 
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
@@ -1068,9 +1010,9 @@ export default function App() {
                 {
                   step: '2', icon: '📋', tab: 'activities', color: '#b00020', bg: '#fde8ec',
                   title: 'Registra las actividades de tu equipo',
-                  desc: 'Agrega cada tarea recurrente que consume tiempo del equipo. Puedes hacerlo una a una, usando la 📚 Biblioteca con 60 actividades de referencia por área, o importando directamente el archivo Excel de plantilla.',
-                  tip: '💡 Descarga la Plantilla Excel (2 pestañas: formulario + 60 actividades de referencia), complétala y luego usa "Importar archivo" para cargarla.',
-                  fields: ['Nueva actividad', 'Minutos por ejecución', 'Frecuencia (veces al mes)', '📚 Biblioteca (60)', '📥 Plantilla Excel', '📤 Importar .xls/.csv', 'Min. con IA (medido)'],
+                  desc: 'Agrega cada tarea recurrente que consume tiempo del equipo. Lo más rápido es el 📚 Catálogo: 150 actividades en 10 áreas que marcas y cargas de una vez. También puedes escribirlas una a una, o importar la plantilla Excel o tu hoja «Mi línea base».',
+                  tip: '💡 Las actividades del catálogo llegan con tiempos de referencia marcados «por confirmar»: edítalos con tus minutos reales para que el análisis sea tuyo.',
+                  fields: ['Nueva actividad', 'Minutos por ejecución', 'Frecuencia (veces al mes)', '📚 Catálogo (150)', '📥 Plantilla Excel', '📤 Importar .xls/.csv', 'Min. con IA (medido)'],
                 },
                 {
                   step: '3', icon: '📊', tab: 'dashboard', color: '#d97706', bg: '#fef9c3',
@@ -1139,13 +1081,13 @@ export default function App() {
                   {[
                     {
                       icon: '📚', color: '#2A5B8C', bg: '#dbeafe',
-                      title: 'Biblioteca de actividades',
-                      desc: 'Más de 60 actividades preconfiguradas distribuidas en 9 áreas: Operaciones, RRHH, Marketing, Finanzas, Ventas, TI, Atención al cliente, Dirección y Logística. Selecciona las que apliquen a tu empresa con un clic.',
+                      title: 'Catálogo de actividades',
+                      desc: '150 actividades del día a día en 10 áreas: Dirección, Comercial, Marketing, Servicio al cliente, Finanzas, Talento humano, Legal, Operaciones, Compras y Tecnología. Marca las tuyas, o el área completa, y cárgalas de una vez con su frecuencia real.',
                     },
                     {
                       icon: '📥', color: '#065f46', bg: '#d1fae5',
                       title: 'Plantilla Excel (.xls)',
-                      desc: 'Descarga un archivo Excel con dos pestañas: "Plantilla CostIQ" (donde ingresas tus actividades) y "Actividades de referencia" (con las 60+ actividades de ejemplo). Complétala y luego impórtala.',
+                      desc: 'Descarga un archivo Excel con dos pestañas: "Plantilla CostIQ" (donde ingresas tus actividades) y "Actividades de referencia" (las 150 del catálogo con su frecuencia real). Complétalo y súbelo con "Importar archivo".',
                     },
                     {
                       icon: '📤', color: '#b45309', bg: '#fef3c7',
@@ -1217,10 +1159,10 @@ export default function App() {
               <div className="bg-[#fff5f6] border border-[#b00020] rounded-xl p-8 mb-6 text-center">
                 <p className="text-2xl mb-2">📊</p>
                 <p className="text-[#b00020] font-semibold text-base mb-1">No hay actividades registradas</p>
-                <p className="text-[#757575] text-sm mb-5">Carga datos de ejemplo para explorar el dashboard, o registra tus propias actividades.</p>
+                <p className="text-[#757575] text-sm mb-5">Elige las actividades de tu puesto en el catálogo, o mira primero cómo se ve con datos de ejemplo.</p>
                 <div className="flex gap-3 justify-center flex-wrap">
-                  <button onClick={loadSample} className={btnR}>Cargar datos de ejemplo</button>
-                  <button onClick={() => setTab('activities')} className={btnO}>Agregar actividades</button>
+                  <button onClick={() => { setTab('activities'); (() => { setSelectedLib({}); setLibFilter(CATALOG[0].area); setLibraryOpen(true); })(); }} className={btnR}>📚 Elegir del catálogo</button>
+                  <button onClick={loadSample} className={btnO}>Ver ejemplos</button>
                 </div>
               </div>
             )}
@@ -1231,6 +1173,12 @@ export default function App() {
                 <span className="text-sm">💡</span>
                 <span className="flex-1">Estás viendo <strong>datos de ejemplo</strong>. Reemplázalos con los de tu empresa en la pestaña Actividades, o ajusta los parámetros en Configuración.</span>
                 <button onClick={clearAll} className="font-semibold underline whitespace-nowrap">Empezar de cero</button>
+              </div>
+            )}
+            {refCount > 0 && !isSampleData && (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 mb-5 text-xs text-amber-800">
+                <span className="text-sm">⏱️</span>
+                <span className="flex-1"><strong>{refCount} de {acts.length} actividad{acts.length !== 1 ? 'es' : ''}</strong> usa{refCount !== 1 ? 'n' : ''} tiempos de referencia del catálogo (marcados «por confirmar»). Hasta que pongas tus minutos reales, las cifras son una estimación, no tu medición.</span>
               </div>
             )}
 
@@ -1382,13 +1330,13 @@ export default function App() {
               </div>
               <div className="flex gap-2 flex-wrap">
                 <button onClick={loadSample} className={btnO}>Cargar ejemplos</button>
-                <button onClick={() => { setSelectedLib({}); setLibFilter('Todas'); setLibraryOpen(true); }} className={btnO}>📚 Biblioteca</button>
+                <button onClick={() => { setSelectedLib({}); setLibFilter(CATALOG[0].area); setLibraryOpen(true); }} className={btnR}>📚 Elegir del catálogo</button>
                 <button onClick={exportXLSTemplate} className={btnO}>📥 Plantilla Excel</button>
                 <label className={btnO + ' cursor-pointer'}>
                   📤 Importar archivo
                   <input type="file" accept=".xls,.csv,text/csv" className="hidden" onChange={importFile} />
                 </label>
-                <button onClick={() => { setDraft(blankAct); setAddOpen(true); }} className={btnR}>+ Nueva actividad</button>
+                <button onClick={() => { setDraft(blankAct); setAddOpen(true); }} className={btnO}>+ Escribir una actividad</button>
               </div>
             </div>
 
@@ -1398,6 +1346,12 @@ export default function App() {
                 <span className="text-sm">💡</span>
                 <span className="flex-1">Estas son <strong>actividades de ejemplo</strong>. Edítalas, elimínalas o agrega las tuyas. Para partir de una hoja en blanco usa "Empezar de cero".</span>
                 <button onClick={clearAll} className="font-semibold underline whitespace-nowrap">Empezar de cero</button>
+              </div>
+            )}
+            {refCount > 0 && !isSampleData && (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 mb-5 text-xs text-amber-800">
+                <span className="text-sm">⏱️</span>
+                <span className="flex-1"><strong>{refCount} de {acts.length} actividad{acts.length !== 1 ? 'es' : ''}</strong> usa{refCount !== 1 ? 'n' : ''} tiempos de referencia del catálogo (marcados «por confirmar»). Pulsa «Editar» en cada una y escribe cuánto te toman a ti; la marca desaparece al guardar tus minutos.</span>
               </div>
             )}
 
@@ -1472,8 +1426,11 @@ export default function App() {
             {/* Table */}
             {!hasData ? (
               <div className="bg-white border border-[#e5e5e5] rounded-xl p-10 text-center">
-                <p className="text-[#757575] text-sm mb-4">No hay actividades registradas todavía.</p>
-                <button onClick={loadSample} className={btnR}>Cargar datos de ejemplo</button>
+                <p className="text-[#757575] text-sm mb-4">No hay actividades registradas todavía. Elige las de tu puesto en el catálogo: 150 actividades en 10 áreas.</p>
+                <div className="flex gap-3 justify-center flex-wrap">
+                  <button onClick={() => { setSelectedLib({}); setLibFilter(CATALOG[0].area); setLibraryOpen(true); }} className={btnR}>📚 Elegir del catálogo</button>
+                  <button onClick={loadSample} className={btnO}>Ver ejemplos</button>
+                </div>
               </div>
             ) : (
               <Card noPad>
@@ -1535,7 +1492,9 @@ export default function App() {
                           <td className="px-3 py-3 text-center text-xs">
                             {editing === m.id
                               ? <input type="number" min="1" className={inp + ' py-1 w-16 text-xs text-center'} value={m.minutesPerRun} onChange={e => updAct(m.id, 'minutesPerRun', +e.target.value)} />
-                              : m.minutesPerRun
+                              : m.refTimes
+                                ? <span title="Tiempo de referencia del catálogo. Edita la fila con tus minutos reales." className="inline-flex flex-col items-center leading-tight"><span className="text-[#757575]">~{m.minutesPerRun}</span><span className="text-[9px] font-semibold px-1.5 rounded-full bg-amber-50 text-amber-700 whitespace-nowrap">por confirmar</span></span>
+                                : m.minutesPerRun
                             }
                           </td>
                           <td className="px-3 py-3 text-center text-xs">
@@ -2124,107 +2083,101 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ── LIBRARY MODAL ── */}
+      {/* ── CATÁLOGO DE ACTIVIDADES ── */}
       {libraryOpen && (() => {
-        const allAreas = ['Todas', ...ACTIVITY_LIBRARY.map(a => a.area)];
-        const filtered = libFilter === 'Todas' ? ACTIVITY_LIBRARY : ACTIVITY_LIBRARY.filter(a => a.area === libFilter);
-        const totalSelected = Object.values(selectedLib).filter(Boolean).length;
-        const addSelected = () => {
-          const toAdd = [];
-          ACTIVITY_LIBRARY.forEach(area => {
-            area.activities.forEach((act, i) => {
-              const key = `${area.area}::${i}`;
-              // La biblioteca está calibrada en min/día: entra como actividad diaria
-              if (selectedLib[key]) toAdd.push(migrateAct({ ...act, id: uid(), minutesWithAI: null }, cfg));
-            });
-          });
-          if (toAdd.length === 0) return;
-          setActs(p => [...p, ...toAdd]);
-          setLibraryOpen(false);
+        // 150 actividades del día a día (10 áreas × 15); las 10 primeras de cada área son las
+        // del catálogo de la Sesión 1. Se marca y se carga: frecuencia real, tiempos «por confirmar».
+        const areaIdx = Math.max(0, CATALOG.findIndex(a => a.area === libFilter));
+        const area = CATALOG[areaIdx];
+        const search = norm(selectedLib.__search || '');
+        const visible = search
+          ? CATALOG.flatMap(a => a.items.map(it => ({ ...it, area: a.area }))).filter(it => norm(it.name).includes(search) || norm(it.produce).includes(search))
+          : area.items.map(it => ({ ...it, area: area.area }));
+        const already = new Set(acts.map(a => norm(a.name)));
+        const picked = CATALOG.flatMap(a => a.items).filter(it => selectedLib[it.n]);
+        const allVisibleOn = visible.length > 0 && visible.every(it => selectedLib[it.n] || already.has(norm(it.name)));
+        const toggle = n => setSelectedLib(s => ({ ...s, [n]: !s[n] }));
+        const toggleAll = () => setSelectedLib(s => {
+          const next = { ...s };
+          for (const it of visible) if (!already.has(norm(it.name))) next[it.n] = !allVisibleOn;
+          return next;
+        });
+        const load = () => {
+          if (!picked.length) return;
+          const n = addFromCatalog(picked);
+          setLibraryOpen(false); setSelectedLib({}); setTab('activities');
+          setTimeout(() => alert(`${n} actividad${n !== 1 ? 'es cargadas' : ' cargada'}.\n\nLos minutos son de referencia (aparecen como «por confirmar»). Edita cada fila con tus tiempos reales y, si ya usas IA, con los minutos con IA.`), 50);
         };
+        const freqTag = it => it.times === 'daily' ? 'Diaria' : it.freq;
         return (
           <div className="fixed inset-0 z-50 bg-black/60 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setLibraryOpen(false)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-4" onClick={e => e.stopPropagation()}>
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e5e5] bg-[#fff5f6] rounded-t-2xl">
+            <div role="dialog" aria-label="Catálogo de actividades" className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl my-6 flex flex-col max-h-[calc(100vh-3rem)]" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-[#e5e5e5] flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-base font-bold text-[#222]">📚 Biblioteca de actividades</h2>
-                  <p className="text-xs text-[#757575]">60 actividades referenciales en 9 áreas empresariales. Selecciona las que apliquen a tu empresa.</p>
+                  <h2 className="text-base font-bold text-[#222]">📚 Catálogo de actividades por área</h2>
+                  <p className="text-xs text-[#757575] mt-0.5">Marca las que haces y cárgalas de una vez. Cada una llega con su frecuencia real y un tiempo de referencia que luego ajustas con el tuyo.</p>
                 </div>
-                <button onClick={() => setLibraryOpen(false)} className="text-[#757575] hover:text-[#222] text-lg leading-none px-2">✕</button>
+                <button onClick={() => setLibraryOpen(false)} aria-label="Cerrar" className="text-[#757575] hover:text-[#222] text-xl leading-none">×</button>
               </div>
 
-              {/* Area filter pills */}
-              <div className="px-5 py-3 border-b border-[#e5e5e5] overflow-x-auto">
-                <div className="flex gap-2 min-w-max">
-                  {allAreas.map(area => {
-                    const areaData = ACTIVITY_LIBRARY.find(a => a.area === area);
-                    return (
-                      <button key={area} onClick={() => setLibFilter(area)}
-                        className={`text-[11px] font-semibold px-3 py-1.5 rounded-full border transition-all whitespace-nowrap ${
-                          libFilter === area
-                            ? 'text-white border-transparent'
-                            : 'bg-white border-[#e5e5e5] text-[#757575] hover:border-[#b00020] hover:text-[#b00020]'
-                        }`}
-                        style={libFilter === area ? { background: areaData?.color || '#b00020', borderColor: areaData?.color || '#b00020' } : {}}
-                      >{area}</button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Activities list */}
-              <div className="overflow-y-auto max-h-[50vh] px-5 py-4 space-y-5">
-                {filtered.map(areaData => (
-                  <div key={areaData.area}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: areaData.bg, color: areaData.color }}>{areaData.area}</span>
-                      <span className="text-[10px] text-[#757575]">{areaData.activities.length} actividades</span>
-                    </div>
-                    <div className="space-y-1">
-                      {areaData.activities.map((act, i) => {
-                        const key = `${areaData.area}::${i}`;
-                        const checked = !!selectedLib[key];
-                        const alreadyAdded = acts.some(a => a.name === act.name);
-                        return (
-                          <label key={key} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                            alreadyAdded ? 'opacity-40 cursor-not-allowed' : checked ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50 border border-transparent'
-                          }`}>
-                            <input type="checkbox" checked={checked} disabled={alreadyAdded}
-                              onChange={e => setSelectedLib(p => ({ ...p, [key]: e.target.checked }))}
-                              className="mt-0.5 accent-[#b00020] cursor-pointer flex-shrink-0"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-[#222] leading-tight">
-                                {act.name}
-                                {alreadyAdded && <span className="text-[10px] text-[#757575] ml-1">(ya agregada)</span>}
-                              </p>
-                              <div className="flex flex-wrap gap-2 mt-1">
-                                <span className="text-[10px] text-[#757575]">{act.minutesPerDay} min · diaria · {act.affectedEmployees} pers.</span>
-                                <PotBadge v={act.automationPotential} />
-                                <span className="text-[10px] font-semibold text-[#16a34a]">-{act.aiTimeReduction}% con IA</span>
-                              </div>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
+              <div className="px-5 pt-3 pb-2 border-b border-[#e5e5e5]">
+                <input type="search" placeholder="Buscar en las 150 actividades (ej.: informe, contrato, correo)…" className={inp + ' mb-2'}
+                  value={selectedLib.__search || ''} onChange={e => setSelectedLib(s => ({ ...s, __search: e.target.value }))} />
+                {!search && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {CATALOG.map((a, i) => {
+                      const n = a.items.filter(it => selectedLib[it.n]).length;
+                      const on = i === areaIdx;
+                      return (
+                        <button key={a.area} onClick={() => setLibFilter(a.area)}
+                          className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${on ? 'bg-[#b00020] border-[#b00020] text-white' : 'bg-white border-[#e5e5e5] text-[#333] hover:border-[#b00020]'}`}>
+                          {a.area}{n > 0 && <span className={`ml-1 font-bold ${on ? 'text-white' : 'text-[#b00020]'}`}>· {n}</span>}
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
               </div>
 
-              {/* Footer */}
-              <div className="flex items-center justify-between px-6 py-4 border-t border-[#e5e5e5] bg-gray-50 rounded-b-2xl">
-                <div className="text-xs text-[#757575]">
-                  {totalSelected > 0
-                    ? <span className="font-semibold text-[#b00020]">{totalSelected} actividad{totalSelected !== 1 ? 'es' : ''} seleccionada{totalSelected !== 1 ? 's' : ''}</span>
-                    : 'Selecciona las actividades que apliquen a tu empresa'}
-                </div>
+              <div className="px-5 py-2 flex items-center justify-between text-xs border-b border-[#e5e5e5] bg-[#fafafa]">
+                <span className="text-[#757575]">{search ? `${visible.length} resultado${visible.length !== 1 ? 's' : ''}` : `${area.area} · ${area.items.length} actividades`}</span>
+                {visible.length > 0 && (
+                  <button onClick={toggleAll} className="font-semibold text-[#b00020] hover:underline">
+                    {allVisibleOn ? 'Quitar selección' : (search ? 'Seleccionar resultados' : 'Seleccionar todas del área')}
+                  </button>
+                )}
+              </div>
+
+              <div className="overflow-y-auto flex-1 px-2 py-1">
+                {visible.length === 0 && <p className="text-sm text-[#757575] text-center py-8">Sin resultados. Prueba con otra palabra o agrégala con «+ Nueva actividad».</p>}
+                {visible.map(it => {
+                  const added = already.has(norm(it.name));
+                  const on = !!selectedLib[it.n];
+                  return (
+                    <label key={it.n} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg ${added ? 'opacity-50 cursor-default' : 'cursor-pointer hover:bg-[#fff5f6]'} ${on ? 'bg-[#fff5f6]' : ''}`}>
+                      <input type="checkbox" className="mt-1 shrink-0" style={{ accentColor: C.red }} checked={on || added} disabled={added} onChange={() => toggle(it.n)} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-[#222]">{it.name}{added && <span className="text-[10px] text-[#757575] ml-2">(ya está en tu lista)</span>}</div>
+                        <div className="text-[11px] text-[#757575] leading-snug">{it.produce}</div>
+                        {search && <div className="text-[10px] text-[#2A5B8C] mt-0.5">{it.area}</div>}
+                      </div>
+                      <div className="text-right shrink-0 text-[11px] leading-tight">
+                        <div className="font-semibold text-[#333]">{freqTag(it)}</div>
+                        <div className="text-[#757575]">~{it.minutes} min</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="px-5 py-3 border-t border-[#e5e5e5] flex items-center justify-between gap-3 flex-wrap">
+                <span className="text-xs text-[#757575]">
+                  {picked.length ? <><b className="text-[#222]">{picked.length}</b> seleccionada{picked.length !== 1 ? 's' : ''}{isSampleData ? ' · reemplazarán los ejemplos' : ''}</> : 'Marca las actividades que haces en tu puesto'}
+                </span>
                 <div className="flex gap-2">
                   <button onClick={() => setLibraryOpen(false)} className={btnO}>Cancelar</button>
-                  <button onClick={addSelected} disabled={totalSelected === 0}
-                    className={`${btnR} ${totalSelected === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                    Agregar {totalSelected > 0 ? `(${totalSelected})` : ''} →
+                  <button onClick={load} disabled={!picked.length} className={btnR + (picked.length ? '' : ' opacity-40 cursor-not-allowed')}>
+                    Cargar {picked.length || ''} actividad{picked.length !== 1 ? 'es' : ''}
                   </button>
                 </div>
               </div>
